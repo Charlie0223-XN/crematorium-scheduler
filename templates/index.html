@@ -170,11 +170,17 @@
         header.className = "day-header";
         header.innerHTML = `
           <span>Day ${index}｜${dateStr}（週${w}）</span>
-          <label>
-            <input type="checkbox" class="full-staff-toggle">
-            禁休日（全員上班）
-          </label>
-        `;
+          <div>
+            <label style="margin-right: 10px;">
+              <input type="checkbox" class="bigday-toggle">
+              大日
+            </label>
+            <label>
+              <input type="checkbox" class="full-staff-toggle">
+              禁休日（全員上班）
+             </label>
+           </div>
+         `;    
         block.appendChild(header);
 
         const empList = document.createElement("div");
@@ -230,25 +236,27 @@
 
       const payloadDays = [];
 
-      blocks.forEach(block => {
-        const fullToggle = block.querySelector(".full-staff-toggle");
-        const empCheckboxes = block.querySelectorAll(".emp-checkbox");
+     blocks.forEach(block => {
+       const fullToggle = block.querySelector(".full-staff-toggle");
+       const bigToggle = block.querySelector(".bigday-toggle");
+       const empCheckboxes = block.querySelectorAll(".emp-checkbox");
+       const dateStr = block.dataset.date;
 
-        if (fullToggle.checked) {
-          payloadDays.push({
-            full_staff: true,
-            employees: []
-          });
-        } else {
-          const emps = [];
-          empCheckboxes.forEach(cb => {
-            if (cb.checked) emps.push(cb.value);
-          });
-          payloadDays.push({
-            full_staff: false,
-            employees: emps
-          });
-        }
+       let emps = [];
+       if (!fullToggle.checked) {
+         empCheckboxes.forEach(cb => {
+           if (cb.checked) emps.push(cb.value);
+         });
+       }
+
+  payloadDays.push({
+    date: dateStr,
+    big_day: bigToggle.checked,
+    full_staff: fullToggle.checked,
+    employees: emps
+  });
+});
+
       });
 
       const resp = await fetch("/api/schedule_range", {

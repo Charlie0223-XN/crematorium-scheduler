@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, render_template, send_file
 from scheduler import generate_day, generate_period, EMPLOYEES
+from datetime import datetime
 
 import io
 from openpyxl import Workbook
@@ -37,11 +38,17 @@ def api_schedule():
 @app.route("/api/schedule_range", methods=["POST"])
 def api_schedule_range():
     """
-    期待前端傳來：
+    接收多天排班需求。
+
+    request JSON 格式預期為：
     {
       "days": [
-        { "employees": ["豐杰", "在慶"], "full_staff": false },
-        { "employees": [], "full_staff": true },
+        {
+          "date": "2025-12-01",
+          "employees": ["豐杰", "在慶"],
+          "full_staff": false,
+          "big_day": true
+        },
         ...
       ]
     }
@@ -52,18 +59,38 @@ def api_schedule_range():
     if not days:
         return jsonify({"error": "至少要提供一天的資料"}), 400
 
-    days_employees = []
+    days_info = []
     for day in days:
         full_staff = day.get("full_staff", False)
+        big_day = day.get("big_day", False)
+        date_str = day.get("date")
+
+        if not date_str:
+            return jsonify({"error": "缺少日期資訊"}), 400
+
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": f"日期格式錯誤：{date_str}"}), 400
+
+        weekday = dt.weekday()  # Monday=0 ... Sunday=6
+
         if full_staff:
             emps = EMPLOYEES[:]  # 全員到齊
         else:
             emps = day.get("employees", [])
             if not emps:
-                return jsonify({"error": "有一天沒有勾任何上班人，且未勾 full_staff"}), 400
-        days_employees.append(emps)
+                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾 full_staff"}), 400
 
-    schedule = generate_period(days_employees)
+        days_info.append({
+            "date": date_str,
+            "weekday": weekday,
+            "big_day": bool(big_day),
+            "employees": emps,
+        })
+
+    # 這裡改用新的演算法：days_info 裡每一天都有 meta
+    schedule = generate_period(days_info)
 
     result = []
     for idx, assign in enumerate(schedule, start=1):
@@ -73,6 +100,7 @@ def api_schedule_range():
         })
 
     return jsonify({"schedule": result})
+
 
 
 # -----------------------------
