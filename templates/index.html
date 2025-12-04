@@ -120,7 +120,7 @@
 
   <script>
     // 從後端帶來的員工名單
-    const EMPLOYEES = {{ employees | tojson }};
+    const EMPLOYEES = {{ employees | tojson | safe }};
     const weekdayMap = ["日","一","二","三","四","五","六"];
 
     // 上一次產生的排班結果 + 日期範圍（給匯出用）
