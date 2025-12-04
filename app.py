@@ -1,13 +1,10 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 from scheduler import generate_day, generate_period, EMPLOYEES
-
-app = Flask(__name__)
 
 import io
 from openpyxl import Workbook
 
 app = Flask(__name__)
-
 
 # -----------------------------
 # 首頁：多日排班 UI
