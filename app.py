@@ -12,7 +12,7 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     # 把員工名單丟給前端，讓 JS 動態產生 checkbox
-    return render_template("index.html",employees=EMPLOYEES)
+    return render_template("index.html", employees=EMPLOYEES)
 
 
 # -----------------------------
