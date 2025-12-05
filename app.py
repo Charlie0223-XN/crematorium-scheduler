@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, request, jsonify, render_template, send_file
 from scheduler import generate_day, generate_period, EMPLOYEES
 from datetime import datetime
@@ -7,12 +8,12 @@ from openpyxl import Workbook
 
 app = Flask(__name__)
 
+
 # -----------------------------
 # 首頁：多日排班 UI
 # -----------------------------
 @app.route("/")
 def index():
-    # 把員工名單丟給前端，讓 JS 動態產生 checkbox
     return render_template("index.html", employees=EMPLOYEES)
 
 
@@ -80,27 +81,34 @@ def api_schedule_range():
         else:
             emps = day.get("employees", [])
             if not emps:
-                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾 full_staff"}), 400
+                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾禁休日"}), 400
 
-        days_info.append({
-            "date": date_str,
-            "weekday": weekday,
-            "big_day": bool(big_day),
-            "employees": emps,
-        })
+        days_info.append(
+            {
+                "date": date_str,
+                "weekday": weekday,
+                "big_day": bool(big_day),
+                "employees": emps,
+            }
+        )
 
-    # 這裡改用新的演算法：days_info 裡每一天都有 meta
-    schedule = generate_period(days_info)
+    # 使用新的多日演算法
+    schedule_assignments = generate_period(days_info)
 
+    # 整理成回傳格式，把 meta 一起帶回前端（方便統計）
     result = []
-    for idx, assign in enumerate(schedule, start=1):
-        result.append({
-            "day_index": idx,
-            "assignment": assign
-        })
+    for idx, (assign, meta) in enumerate(zip(schedule_assignments, days_info), start=1):
+        result.append(
+            {
+                "day_index": idx,
+                "date": meta["date"],
+                "weekday": meta["weekday"],
+                "big_day": meta["big_day"],
+                "assignment": assign,
+            }
+        )
 
     return jsonify({"schedule": result})
-
 
 
 # -----------------------------
@@ -111,7 +119,10 @@ def export_excel():
     """
     期待前端傳來：
     {
-      "schedule": [ { "day_index": 1, "assignment": {...} }, ... ],
+      "schedule": [
+        { "day_index": 1, "date": "...", "assignment": {...}, ... },
+        ...
+      ],
       "start_date": "2024-11-09",
       "end_date": "2024-12-06"
     }
@@ -121,7 +132,6 @@ def export_excel():
     start_date = data.get("start_date", "")
     end_date = data.get("end_date", "")
 
-    # 建立 Excel
     wb = Workbook()
     ws = wb.active
     ws.title = "Schedule"
@@ -129,10 +139,14 @@ def export_excel():
     row = 1
     for day in schedule:
         day_index = day.get("day_index")
+        date_str = day.get("date", "")
         assignment = day.get("assignment", {}) or {}
 
-        # Day n
-        ws.cell(row=row, column=1, value=f"Day {day_index}")
+        # Day n + 日期
+        if date_str:
+            ws.cell(row=row, column=1, value=f"Day {day_index}  ({date_str})")
+        else:
+            ws.cell(row=row, column=1, value=f"Day {day_index}")
         row += 1
 
         # 依姓名排序
@@ -144,12 +158,10 @@ def export_excel():
         # 空一行
         row += 1
 
-    # 寫到記憶體
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
 
-    # 檔名
     if start_date and end_date:
         filename = f"schedule_{start_date}_to_{end_date}.xlsx"
     else:
@@ -163,8 +175,5 @@ def export_excel():
     )
 
 
-# -----------------------------
-# 啟動
-# -----------------------------
 if __name__ == "__main__":
     app.run(debug=True)
