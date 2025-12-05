@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 
 # 員工名單（你前面確認過）
-EMPLOYEES = ["豐杰", "在慶", "學林", "奕忠", "子紘", "紀龍", "孟桓", "立群", "天立"]
+EMPLOYEES = ["豐杰", "在慶", "孟桓", "奕忠", "立群", "紀龍", "學林", "子紘", "天立"]
 
 ROLES = ["A", "B", "C", "D", "E"]
 
