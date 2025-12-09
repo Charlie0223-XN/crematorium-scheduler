@@ -81,34 +81,30 @@ def api_schedule_range():
         else:
             emps = day.get("employees", [])
             if not emps:
-                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾禁休日"}), 400
+                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾 full_staff"}), 400
 
-        days_info.append(
-            {
-                "date": date_str,
-                "weekday": weekday,
-                "big_day": bool(big_day),
-                "employees": emps,
-            }
-        )
+        days_info.append({
+            "date": date_str,
+            "weekday": weekday,
+            "big_day": bool(big_day),
+            "employees": emps,
+        })
 
-    # 使用新的多日演算法
-    schedule_assignments = generate_period(days_info)
+    # 用你最後版的演算法排整段
+    schedule = generate_period(days_info)
 
-    # 整理成回傳格式，把 meta 一起帶回前端（方便統計）
+    # 回傳時把 date / big_day 一起帶回去，方便前端顯示與統計
     result = []
-    for idx, (assign, meta) in enumerate(zip(schedule_assignments, days_info), start=1):
-        result.append(
-            {
-                "day_index": idx,
-                "date": meta["date"],
-                "weekday": meta["weekday"],
-                "big_day": meta["big_day"],
-                "assignment": assign,
-            }
-        )
+    for idx, (meta, assign) in enumerate(zip(days_info, schedule), start=1):
+        result.append({
+            "day_index": idx,
+            "date": meta["date"],
+            "big_day": bool(meta.get("big_day", False)),
+            "assignment": assign
+        })
 
     return jsonify({"schedule": result})
+
 
 
 # -----------------------------

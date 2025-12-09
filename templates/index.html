@@ -1,550 +1,456 @@
 <!doctype html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="utf-8" />
-    <title>火葬場排班 AI（多日版）</title>
-    <style>
-      body {
-        font-family: "Microsoft JhengHei", sans-serif;
-        padding: 20px;
-        background: #f5f5f5;
-      }
-      h1 {
-        margin-bottom: 10px;
-      }
-      .control-panel,
-      .result-panel,
-      .stats-panel {
-        background: #ffffff;
-        padding: 16px;
-        margin-bottom: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-      }
-      .field-row {
-        margin-bottom: 10px;
-      }
-      label {
-        margin-right: 8px;
-      }
-      .days-container {
-        margin-top: 10px;
-      }
-      .day-block {
-        background: #fafafa;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        padding: 10px;
-        margin-bottom: 10px;
-      }
-      .day-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 6px;
-        font-weight: bold;
-      }
-      .emp-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-      .emp-item {
-        border: 1px solid #ccc;
-        padding: 3px 6px;
-        border-radius: 4px;
-        background: #fff;
-        font-size: 13px;
-      }
-      button {
-        padding: 6px 12px;
-        border-radius: 4px;
-        border: none;
-        cursor: pointer;
-        background: #1976d2;
-        color: #fff;
-        font-size: 14px;
-        margin-right: 8px;
-      }
-      button:disabled {
-        background: #aaa;
-        cursor: not-allowed;
-      }
-      .result-day {
-        margin-bottom: 16px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #ddd;
-      }
-      .result-day h3 {
-        margin: 0 0 4px 0;
-      }
-      pre {
-        white-space: pre-wrap;
-        font-size: 13px;
-        background: #f9f9f9;
-        padding: 8px;
-        border-radius: 4px;
-        border: 1px solid #eee;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: 13px;
-      }
-      th,
-      td {
-        border: 1px solid #ddd;
-        padding: 6px 8px;
-        text-align: center;
-      }
-      th {
-        background: #f0f0f0;
-      }
-      .bad {
-        color: #c62828;
-        font-weight: bold;
-      }
-    </style>
+<head>
+  <meta charset="utf-8">
+  <title>火葬場排班 AI（多日版）</title>
+  <style>
+    body {
+      font-family: "Microsoft JhengHei", sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .control-panel, .result-panel {
+      background: #ffffff;
+      padding: 16px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    .field-row {
+      margin-bottom: 10px;
+    }
+    label {
+      margin-right: 8px;
+    }
+    .days-container {
+      margin-top: 10px;
+    }
+    .day-block {
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .day-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+    .emp-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .emp-item {
+      border: 1px solid #ccc;
+      padding: 3px 6px;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 13px;
+    }
+    button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      background: #1976d2;
+      color: #fff;
+      font-size: 14px;
+      margin-right: 8px;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    .result-day {
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+    .result-day h3 {
+      margin: 0 0 4px 0;
+    }
+    pre {
+      white-space: pre-wrap;
+      font-size: 13px;
+      background: #f9f9f9;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #eee;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px 6px;
+      text-align: center;
+    }
+    th {
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔥 火葬場排班 AI（多日版）</h1>
 
-    <!-- Chart.js for 雷達圖 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  </head>
-  <body>
-    <h1>🔥 火葬場排班 AI（多日版）</h1>
-
-    <div class="control-panel">
-      <div class="field-row">
-        <label for="start-date">起始日期：</label>
-        <input type="date" id="start-date" />
-        <label for="end-date" style="margin-left: 12px">結束日期：</label>
-        <input type="date" id="end-date" />
-        <button type="button" onclick="buildDays()">建立日期列表</button>
-      </div>
-      <div class="field-row">
-        <small
-          >說明：先選起始與結束日期 → 按「建立日期列表」→ 每天勾上班人員／是否禁休日（全員）／是否大日 →
-          按「產生整段排班」。</small
-        >
-      </div>
-
-      <div id="days-container" class="days-container"></div>
-
-      <div class="field-row">
-        <button type="button" id="generate-btn" onclick="generateSchedule()" disabled>
-          產生整段排班
-        </button>
-        <button type="button" id="export-btn" onclick="exportExcel()" disabled>
-          下載 Excel
-        </button>
-        <button type="button" id="stats-btn" onclick="renderStats()" disabled>
-          查看排班統計
-        </button>
-      </div>
+  <div class="control-panel">
+    <div class="field-row">
+      <label for="start-date">起始日期：</label>
+      <input type="date" id="start-date">
+      <label for="end-date" style="margin-left: 12px;">結束日期：</label>
+      <input type="date" id="end-date">
+      <button type="button" onclick="buildDays()">建立日期列表</button>
+    </div>
+    <div class="field-row">
+      <small>說明：先選起始與結束日期 → 按「建立日期列表」→ 勾選每天誰有上班／是否禁休／是否大日 → 按「產生整段排班」。</small>
     </div>
 
-    <div id="result-panel" class="result-panel" style="display: none">
-      <h2>排班結果</h2>
-      <div id="result-content"></div>
+    <div id="days-container" class="days-container"></div>
+
+    <div class="field-row">
+      <button type="button" id="generate-btn" onclick="generateSchedule()" disabled>
+        產生整段排班
+      </button>
+      <button type="button" id="export-btn" onclick="exportExcel()" disabled>
+        下載 Excel
+      </button>
     </div>
+  </div>
 
-    <div id="stats-panel" class="stats-panel" style="display: none">
-      <h2>統計與雷達圖</h2>
-      <p style="font-size: 13px">
-        說明：<br />
-        ・A/B/C/D/E 次數：整段排班中各角色出現次數。<br />
-        ・大日D：在標記為大日的日子裡擔任 D 的次數（壓力大的值班）。<br />
-        ・週一C：在週一擔任 C 的次數（含特殊任務）。<br />
-        ・連續C：是否出現 C → C 的違規情況（理想情況應該是 0）。<br />
-      </p>
-      <canvas id="radarChart" width="400" height="300"></canvas>
-      <div style="margin-top: 16px">
-        <h3>詳細統計表</h3>
-        <div id="stats-table-wrapper"></div>
-      </div>
-    </div>
+  <div id="result-panel" class="result-panel" style="display:none;">
+    <h2>排班結果</h2>
+    <div id="result-content"></div>
+  </div>
 
-    <script>
-      // 從後端帶來的員工名單
-      const EMPLOYEES = {{ employees | tojson | safe }};
-      const weekdayMap = ["日", "一", "二", "三", "四", "五", "六"];
+  <div id="stats-panel" class="result-panel" style="display:none;">
+    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數）</h2>
+    <div id="stats-content"></div>
+  </div>
 
-      // 上一次產生的排班結果 + 日期範圍（給匯出／統計用）
+  <script>
+    // 從後端帶來的員工名單
+    const EMPLOYEES = {{ employees | tojson | safe }};
+    const weekdayMap = ["日","一","二","三","四","五","六"];
+
+    // 上一次產生的排班結果 + 日期範圍（給匯出用）
+    window.lastSchedule = null;
+    window.lastStartDate = "";
+    window.lastEndDate = "";
+
+    function parseDateInput(id) {
+      const v = document.getElementById(id).value;
+      if (!v) return null;
+      return new Date(v + "T00:00:00");
+    }
+
+    function buildDays() {
+      const start = parseDateInput("start-date");
+      const end = parseDateInput("end-date");
+      const container = document.getElementById("days-container");
+      container.innerHTML = "";
+      document.getElementById("result-panel").style.display = "none";
+      document.getElementById("stats-panel").style.display = "none";
+      document.getElementById("export-btn").disabled = true;
       window.lastSchedule = null;
-      window.lastStartDate = "";
-      window.lastEndDate = "";
 
-      let radarChart = null;
-
-      function parseDateInput(id) {
-        const v = document.getElementById(id).value;
-        if (!v) return null;
-        return new Date(v + "T00:00:00");
+      if (!start || !end) {
+        alert("請先選擇起始與結束日期。");
+        return;
+      }
+      if (end < start) {
+        alert("結束日期不能早於起始日期。");
+        return;
       }
 
-      function buildDays() {
-        const start = parseDateInput("start-date");
-        const end = parseDateInput("end-date");
-        const container = document.getElementById("days-container");
-        container.innerHTML = "";
-        document.getElementById("result-panel").style.display = "none";
-        document.getElementById("stats-panel").style.display = "none";
-        document.getElementById("export-btn").disabled = true;
-        document.getElementById("stats-btn").disabled = true;
-        window.lastSchedule = null;
+      let current = new Date(start.getTime());
+      let index = 1;
 
-        if (!start || !end) {
-          alert("請先選擇起始與結束日期。");
-          return;
-        }
-        if (end < start) {
-          alert("結束日期不能早於起始日期。");
-          return;
-        }
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = (current.getMonth() + 1).toString().padStart(2, "0");
+        const d = current.getDate().toString().padStart(2, "0");
+        const w = weekdayMap[current.getDay()];
+        const dateStr = `${y}-${m}-${d}`;
 
-        let current = new Date(start.getTime());
-        let index = 1;
+        const block = document.createElement("div");
+        block.className = "day-block";
+        block.dataset.date = dateStr;
 
-        while (current <= end) {
-          const y = current.getFullYear();
-          const m = (current.getMonth() + 1).toString().padStart(2, "0");
-          const d = current.getDate().toString().padStart(2, "0");
-          const w = weekdayMap[current.getDay()];
-          const dateStr = `${y}-${m}-${d}`;
-
-          const block = document.createElement("div");
-          block.className = "day-block";
-          block.dataset.date = dateStr;
-
-          const header = document.createElement("div");
-          header.className = "day-header";
-          header.innerHTML = `
-            <span>Day ${index}｜${dateStr}（週${w}）</span>
-            <div>
-              <label style="margin-right: 10px;">
-                <input type="checkbox" class="bigday-toggle">
-                大日
-              </label>
-              <label>
-                <input type="checkbox" class="full-staff-toggle">
-                禁休日（全員上班）
-              </label>
-            </div>
-          `;
-          block.appendChild(header);
-
-          const empList = document.createElement("div");
-          empList.className = "emp-list";
-
-          EMPLOYEES.forEach((name) => {
-            const label = document.createElement("label");
-            label.className = "emp-item";
-            label.innerHTML = `
-              <input type="checkbox" class="emp-checkbox" value="${name}">
-              ${name}
-            `;
-            empList.appendChild(label);
-          });
-
-          block.appendChild(empList);
-          container.appendChild(block);
-
-          const fullToggle = block.querySelector(".full-staff-toggle");
-          fullToggle.addEventListener("change", () => {
-            const checkboxes = block.querySelectorAll(".emp-checkbox");
-            checkboxes.forEach((cb) => {
-              cb.checked = fullToggle.checked;
-            });
-          });
-
-          const empCheckboxes = block.querySelectorAll(".emp-checkbox");
-          empCheckboxes.forEach((cb) => {
-            cb.addEventListener("change", () => {
-              const allChecked = Array.from(empCheckboxes).every((x) => x.checked);
-              fullToggle.checked = allChecked;
-            });
-          });
-
-          current.setDate(current.getDate() + 1);
-          index++;
-        }
-
-        if (index > 1) {
-          document.getElementById("generate-btn").disabled = false;
-        } else {
-          document.getElementById("generate-btn").disabled = true;
-        }
-      }
-
-      async function generateSchedule() {
-        const container = document.getElementById("days-container");
-        const blocks = container.querySelectorAll(".day-block");
-        if (!blocks.length) {
-          alert("請先建立日期列表。");
-          return;
-        }
-
-        const payloadDays = [];
-
-        blocks.forEach((block) => {
-          const fullToggle = block.querySelector(".full-staff-toggle");
-          const bigToggle = block.querySelector(".bigday-toggle");
-          const empCheckboxes = block.querySelectorAll(".emp-checkbox");
-          const dateStr = block.dataset.date;
-
-          let emps = [];
-          if (!fullToggle.checked) {
-            empCheckboxes.forEach((cb) => {
-              if (cb.checked) emps.push(cb.value);
-            });
-          }
-
-          payloadDays.push({
-            date: dateStr,
-            big_day: bigToggle.checked,
-            full_staff: fullToggle.checked,
-            employees: emps,
-          });
-        });
-
-        const resp = await fetch("/api/schedule_range", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ days: payloadDays }),
-        });
-
-        const data = await resp.json();
-        const panel = document.getElementById("result-panel");
-        const content = document.getElementById("result-content");
-
-        if (!resp.ok || data.error) {
-          panel.style.display = "block";
-          content.innerHTML = `<p style="color:red;">錯誤：${data.error || "未知錯誤"}</p>`;
-          document.getElementById("export-btn").disabled = true;
-          document.getElementById("stats-btn").disabled = true;
-          return;
-        }
-
-        const schedule = data.schedule || [];
-        window.lastSchedule = schedule;
-        window.lastStartDate = document.getElementById("start-date").value;
-        window.lastEndDate = document.getElementById("end-date").value;
-        document.getElementById("export-btn").disabled = schedule.length === 0;
-        document.getElementById("stats-btn").disabled = schedule.length === 0;
-
-        let html = "";
-        schedule.forEach((day) => {
-          const dateStr = day.date || "";
-          html += `<div class="result-day">`;
-          html += `<h3>Day ${day.day_index}${
-            dateStr ? " ｜ " + dateStr : ""
-          }</h3>`;
-          html += `<pre>`;
-          const assignment = day.assignment || {};
-          for (const [name, pos] of Object.entries(assignment)) {
-            html += `${name}：${pos}\n`;
-          }
-          html += `</pre>`;
-          html += `</div>`;
-        });
-
-        panel.style.display = "block";
-        content.innerHTML = html;
-      }
-
-      async function exportExcel() {
-        if (!window.lastSchedule || !window.lastSchedule.length) {
-          alert("請先產生排班，再下載 Excel。");
-          return;
-        }
-
-        const startDate =
-          window.lastStartDate || document.getElementById("start-date").value;
-        const endDate =
-          window.lastEndDate || document.getElementById("end-date").value;
-
-        const resp = await fetch("/api/export_excel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            schedule: window.lastSchedule,
-            start_date: startDate,
-            end_date: endDate,
-          }),
-        });
-
-        if (!resp.ok) {
-          alert("下載失敗，請稍後再試。");
-          return;
-        }
-
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = ""; // 檔名由後端 headers 控制
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      }
-
-      function computeStats() {
-        const stats = {};
-        EMPLOYEES.forEach((name) => {
-          stats[name] = {
-            roles: { A: 0, B: 0, C: 0, D: 0, E: 0 },
-            bigA: 0,
-            bigD: 0,
-            monC: 0,
-            consecutiveC: 0,
-          };
-        });
-
-        const lastRole = {};
-        if (!window.lastSchedule) return stats;
-
-        window.lastSchedule.forEach((day) => {
-          const assignment = day.assignment || {};
-          const weekday = day.weekday; // 0=Mon
-          const isBig = !!day.big_day;
-
-          EMPLOYEES.forEach((name) => {
-            const role = assignment[name] || null;
-            if (!role) {
-              lastRole[name] = role;
-              return;
-            }
-
-            if (!stats[name].roles[role]) {
-              stats[name].roles[role] = 0;
-            }
-            stats[name].roles[role]++;
-
-            if (isBig && role === "A") stats[name].bigA++;
-            if (isBig && role === "D") stats[name].bigD++;
-
-            if (weekday === 0 && role === "C" && name !== "在慶" && name !== "奕忠") {
-              stats[name].monC++;
-            }
-
-            if (lastRole[name] === "C" && role === "C") {
-              stats[name].consecutiveC++;
-            }
-
-            lastRole[name] = role;
-          });
-        });
-
-        return stats;
-      }
-
-      function renderStats() {
-        if (!window.lastSchedule || !window.lastSchedule.length) {
-          alert("請先產生排班，再查看統計。");
-          return;
-        }
-
-        const stats = computeStats();
-        const panel = document.getElementById("stats-panel");
-        panel.style.display = "block";
-
-        // ---- 1. 產生表格 ----
-        let tableHtml = `
-          <table>
-            <thead>
-              <tr>
-                <th>姓名</th>
-                <th>A</th>
-                <th>B</th>
-                <th>C</th>
-                <th>D</th>
-                <th>E</th>
-                <th>大日A</th>
-                <th>大日D</th>
-                <th>週一C</th>
-                <th>連續C違規</th>
-              </tr>
-            </thead>
-            <tbody>
+        const header = document.createElement("div");
+        header.className = "day-header";
+        header.innerHTML = `
+          <span>Day ${index}｜${dateStr}（週${w}）</span>
+          <div>
+            <label style="margin-right: 10px;">
+              <input type="checkbox" class="bigday-toggle">
+              大日
+            </label>
+            <label>
+              <input type="checkbox" class="full-staff-toggle">
+              禁休日（全員上班）
+            </label>
+          </div>
         `;
+        block.appendChild(header);
 
-        EMPLOYEES.forEach((name) => {
-          const s = stats[name];
-          tableHtml += "<tr>";
-          tableHtml += `<td>${name}</td>`;
-          tableHtml += `<td>${s.roles.A || 0}</td>`;
-          tableHtml += `<td>${s.roles.B || 0}</td>`;
-          tableHtml += `<td>${s.roles.C || 0}</td>`;
-          tableHtml += `<td>${s.roles.D || 0}</td>`;
-          tableHtml += `<td>${s.roles.E || 0}</td>`;
-          tableHtml += `<td>${s.bigA}</td>`;
-          tableHtml += `<td>${s.bigD}</td>`;
-          tableHtml += `<td>${s.monC}</td>`;
-          tableHtml += `<td class="${
-            s.consecutiveC > 0 ? "bad" : ""
-          }">${s.consecutiveC}</td>`;
-          tableHtml += "</tr>";
+        const empList = document.createElement("div");
+        empList.className = "emp-list";
+
+        EMPLOYEES.forEach(name => {
+          const label = document.createElement("label");
+          label.className = "emp-item";
+          label.innerHTML = `
+            <input type="checkbox" class="emp-checkbox" value="${name}">
+            ${name}
+          `;
+          empList.appendChild(label);
         });
 
-        tableHtml += "</tbody></table>";
-        document.getElementById("stats-table-wrapper").innerHTML = tableHtml;
+        block.appendChild(empList);
+        container.appendChild(block);
 
-        // ---- 2. 雷達圖 ----
-        const labels = ["A", "B", "C", "D", "E", "大日D", "週一C"];
-
-        const datasets = EMPLOYEES.map((name, idx) => {
-          const s = stats[name];
-          // 簡單顏色（你如果之後要調也可以）
-          const hue = (idx * 40) % 360;
-          const borderColor = `hsl(${hue}, 70%, 45%)`;
-          const bgColor = `hsla(${hue}, 70%, 45%, 0.15)`;
-
-          return {
-            label: name,
-            data: [
-              s.roles.A || 0,
-              s.roles.B || 0,
-              s.roles.C || 0,
-              s.roles.D || 0,
-              s.roles.E || 0,
-              s.bigD,
-              s.monC,
-            ],
-            fill: true,
-            borderColor: borderColor,
-            backgroundColor: bgColor,
-            pointRadius: 2,
-          };
+        const fullToggle = block.querySelector(".full-staff-toggle");
+        fullToggle.addEventListener("change", () => {
+          const checkboxes = block.querySelectorAll(".emp-checkbox");
+          checkboxes.forEach(cb => {
+            cb.checked = fullToggle.checked;
+          });
         });
 
-        const ctx = document.getElementById("radarChart").getContext("2d");
-        if (radarChart) {
-          radarChart.destroy();
-        }
-        radarChart = new Chart(ctx, {
-          type: "radar",
-          data: {
-            labels: labels,
-            datasets: datasets,
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: {
-                position: "top",
-              },
-            },
-            scales: {
-              r: {
-                beginAtZero: true,
-                ticks: {
-                  precision: 0,
-                },
-              },
-            },
-          },
+        const empCheckboxes = block.querySelectorAll(".emp-checkbox");
+        empCheckboxes.forEach(cb => {
+          cb.addEventListener("change", () => {
+            const allChecked = Array.from(empCheckboxes).every(x => x.checked);
+            fullToggle.checked = allChecked;
+          });
         });
+
+        current.setDate(current.getDate() + 1);
+        index++;
       }
-    </script>
-  </body>
+
+      if (index > 1) {
+        document.getElementById("generate-btn").disabled = false;
+      } else {
+        document.getElementById("generate-btn").disabled = true;
+      }
+    }
+
+    async function generateSchedule() {
+      const container = document.getElementById("days-container");
+      const blocks = container.querySelectorAll(".day-block");
+      if (!blocks.length) {
+        alert("請先建立日期列表。");
+        return;
+      }
+
+      const payloadDays = [];
+
+      blocks.forEach(block => {
+        const fullToggle = block.querySelector(".full-staff-toggle");
+        const bigToggle = block.querySelector(".bigday-toggle");
+        const empCheckboxes = block.querySelectorAll(".emp-checkbox");
+        const dateStr = block.dataset.date;
+
+        let emps = [];
+        if (!fullToggle.checked) {
+          empCheckboxes.forEach(cb => {
+            if (cb.checked) emps.push(cb.value);
+          });
+        }
+
+        payloadDays.push({
+          date: dateStr,
+          big_day: bigToggle.checked,
+          full_staff: fullToggle.checked,
+          employees: emps
+        });
+      });
+
+      const resp = await fetch("/api/schedule_range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: payloadDays })
+      });
+
+      const data = await resp.json();
+      const panel = document.getElementById("result-panel");
+      const content = document.getElementById("result-content");
+
+      if (!resp.ok || data.error) {
+        panel.style.display = "block";
+        content.innerHTML = `<p style="color:red;">錯誤：${data.error || "未知錯誤"}</p>`;
+        document.getElementById("export-btn").disabled = true;
+        document.getElementById("stats-panel").style.display = "none";
+        return;
+      }
+
+      const schedule = data.schedule || [];
+      window.lastSchedule = schedule;
+      window.lastStartDate = document.getElementById("start-date").value;
+      window.lastEndDate = document.getElementById("end-date").value;
+      document.getElementById("export-btn").disabled = schedule.length === 0;
+
+      let html = "";
+      schedule.forEach(day => {
+        html += `<div class="result-day">`;
+        const dateLabel = day.date ? `｜${day.date}` : "";
+        const bigLabel = day.big_day ? "（大日）" : "";
+        html += `<h3>Day ${day.day_index}${dateLabel}${bigLabel}</h3>`;
+        html += `<pre>`;
+        for (const [name, pos] of Object.entries(day.assignment)) {
+          html += `${name}：${pos}\n`;
+        }
+        html += `</pre>`;
+        html += `</div>`;
+      });
+
+      panel.style.display = "block";
+      content.innerHTML = html;
+
+      // 產生統計表
+      renderStats(schedule);
+    }
+
+    function renderStats(schedule) {
+      const panel = document.getElementById("stats-panel");
+      const content = document.getElementById("stats-content");
+
+      if (!schedule || !schedule.length) {
+        panel.style.display = "none";
+        content.innerHTML = "";
+        return;
+      }
+
+      // 初始化統計
+      const stats = {};
+      EMPLOYEES.forEach(name => {
+        stats[name] = {
+          total: 0,
+          A: 0,
+          B: 0,
+          C: 0,
+          D: 0,
+          E: 0,
+          bigA: 0,
+          bigD: 0,
+          monC: 0,
+        };
+      });
+
+      schedule.forEach(day => {
+        const dateStr = day.date;
+        const isBig = !!day.big_day;
+
+        let weekday = null; // 0=日,1=一,...6=六
+        if (dateStr) {
+          const d = new Date(dateStr + "T00:00:00");
+          if (!isNaN(d.getTime())) {
+            weekday = d.getDay();
+          }
+        }
+
+        for (const [name, role] of Object.entries(day.assignment)) {
+          if (!stats[name]) {
+            stats[name] = {
+              total: 0,
+              A: 0, B: 0, C: 0, D: 0, E: 0,
+              bigA: 0, bigD: 0, monC: 0,
+            };
+          }
+          stats[name].total += 1;
+          if (stats[name][role] !== undefined) {
+            stats[name][role] += 1;
+          }
+          if (isBig && role === "A") {
+            stats[name].bigA += 1;
+          }
+          if (isBig && role === "D") {
+            stats[name].bigD += 1;
+          }
+          // JS 的 Monday = 1
+          if (weekday === 1 && role === "C" && name !== "在慶" && name !== "奕忠") {
+            stats[name].monC += 1;
+          }
+        }
+      });
+
+      const names = Object.keys(stats).sort((a, b) =>
+        a.localeCompare(b, "zh-Hant")
+      );
+
+      let html = "<table><thead><tr>";
+      html += "<th>人員</th>";
+      html += "<th>總班數</th>";
+      html += "<th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>";
+      html += "<th>大日 A</th><th>大日 D</th><th>週一 C</th>";
+      html += "</tr></thead><tbody>";
+
+      names.forEach(name => {
+        const s = stats[name];
+        html += "<tr>";
+        html += `<td>${name}</td>`;
+        html += `<td>${s.total}</td>`;
+        html += `<td>${s.A}</td>`;
+        html += `<td>${s.B}</td>`;
+        html += `<td>${s.C}</td>`;
+        html += `<td>${s.D}</td>`;
+        html += `<td>${s.E}</td>`;
+        html += `<td>${s.bigA}</td>`;
+        html += `<td>${s.bigD}</td>`;
+        html += `<td>${s.monC}</td>`;
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+
+      content.innerHTML = html;
+      panel.style.display = "block";
+    }
+
+    async function exportExcel() {
+      if (!window.lastSchedule || !window.lastSchedule.length) {
+        alert("請先產生排班，再下載 Excel。");
+        return;
+      }
+
+      const startDate = window.lastStartDate || document.getElementById("start-date").value;
+      const endDate = window.lastEndDate || document.getElementById("end-date").value;
+
+      const resp = await fetch("/api/export_excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule: window.lastSchedule,
+          start_date: startDate,
+          end_date: endDate
+        })
+      });
+
+      if (!resp.ok) {
+        alert("下載失敗，請稍後再試。");
+        return;
+      }
+
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";  // 檔名由後端 headers 控制
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
 </html>
