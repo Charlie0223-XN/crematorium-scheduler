@@ -132,7 +132,7 @@
   </div>
 
   <div id="stats-panel" class="result-panel" style="display:none;">
-    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數）</h2>
+    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數 ＋ 大日 D 差異＆明細）</h2>
     <div id="stats-content"></div>
   </div>
 
@@ -317,7 +317,7 @@
       panel.style.display = "block";
       content.innerHTML = html;
 
-      // 產生統計表
+      // 產生統計表 + 大日D差異
       renderStats(schedule);
     }
 
@@ -331,8 +331,9 @@
         return;
       }
 
-      // 初始化統計
+      // 初始化統計 & 大日D日期紀錄
       const stats = {};
+      const bigDDays = {}; // 記錄每個人 大日D 是哪幾天
       EMPLOYEES.forEach(name => {
         stats[name] = {
           total: 0,
@@ -345,6 +346,7 @@
           bigD: 0,
           monC: 0,
         };
+        bigDDays[name] = [];
       });
 
       schedule.forEach(day => {
@@ -367,15 +369,22 @@
               bigA: 0, bigD: 0, monC: 0,
             };
           }
+          if (!bigDDays[name]) {
+            bigDDays[name] = [];
+          }
+
           stats[name].total += 1;
           if (stats[name][role] !== undefined) {
             stats[name][role] += 1;
           }
+
           if (isBig && role === "A") {
             stats[name].bigA += 1;
           }
           if (isBig && role === "D") {
             stats[name].bigD += 1;
+            const label = dateStr ? dateStr : `Day ${day.day_index}`;
+            bigDDays[name].push(label);
           }
           // JS 的 Monday = 1
           if (weekday === 1 && role === "C" && name !== "在慶" && name !== "奕忠") {
@@ -412,6 +421,38 @@
       });
 
       html += "</tbody></table>";
+
+      // ===== 大日 D 差異統計 =====
+      let totalBigD = 0;
+      names.forEach(name => {
+        totalBigD += stats[name].bigD;
+      });
+      const avgBigD = names.length ? (totalBigD / names.length) : 0;
+
+      html += "<h3>⛰ 大日 D 平衡檢視</h3>";
+      html += "<table><thead><tr>";
+      html += "<th>人員</th><th>大日 D 次數</th><th>與平均差異</th>";
+      html += "</tr></thead><tbody>";
+
+      names.forEach(name => {
+        const countD = stats[name].bigD;
+        const diff = (countD - avgBigD).toFixed(2);
+        html += "<tr>";
+        html += `<td>${name}</td>`;
+        html += `<td>${countD}</td>`;
+        html += `<td>${diff}</td>`;
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+
+      // ===== 大日 D 詳細日期 =====
+      html += "<h3>📅 各人「大日 D」日期明細</h3>";
+      names.forEach(name => {
+        const days = bigDDays[name];
+        const line = days.length ? days.join("、") : "（本期無大日 D）";
+        html += `<p>${name}：${line}</p>`;
+      });
 
       content.innerHTML = html;
       panel.style.display = "block";

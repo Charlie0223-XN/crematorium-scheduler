@@ -95,12 +95,13 @@ def api_schedule_range():
 
     # 回傳時把 date / big_day 一起帶回去，方便前端顯示與統計
     result = []
-    for idx, (meta, assign) in enumerate(zip(days_info, schedule), start=1):
+    for idx, assign in enumerate(schedule):
+        day_meta = days_info[idx]
         result.append({
-            "day_index": idx,
-            "date": meta["date"],
-            "big_day": bool(meta.get("big_day", False)),
-            "assignment": assign
+            "day_index": idx + 1,
+            "date": day_meta["date"],
+            "big_day": bool(day_meta.get("big_day", False)),
+            "assignment": assign,
         })
 
     return jsonify({"schedule": result})
