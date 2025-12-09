@@ -132,7 +132,7 @@
   </div>
 
   <div id="stats-panel" class="result-panel" style="display:none;">
-    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數 ＋ 大日 D 差異＆明細）</h2>
+    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數 ＋ 大日 A/D 差異＆明細）</h2>
     <div id="stats-content"></div>
   </div>
 
@@ -317,7 +317,7 @@
       panel.style.display = "block";
       content.innerHTML = html;
 
-      // 產生統計表 + 大日D差異
+      // 產生統計表 + 大日A/D差異
       renderStats(schedule);
     }
 
@@ -331,9 +331,11 @@
         return;
       }
 
-      // 初始化統計 & 大日D日期紀錄
+      // 初始化統計 & 大日A/D日期紀錄
       const stats = {};
       const bigDDays = {}; // 記錄每個人 大日D 是哪幾天
+      const bigADays = {}; // 記錄每個人 大日A 是哪幾天
+
       EMPLOYEES.forEach(name => {
         stats[name] = {
           total: 0,
@@ -347,6 +349,7 @@
           monC: 0,
         };
         bigDDays[name] = [];
+        bigADays[name] = [];
       });
 
       schedule.forEach(day => {
@@ -372,6 +375,9 @@
           if (!bigDDays[name]) {
             bigDDays[name] = [];
           }
+          if (!bigADays[name]) {
+            bigADays[name] = [];
+          }
 
           stats[name].total += 1;
           if (stats[name][role] !== undefined) {
@@ -380,11 +386,13 @@
 
           if (isBig && role === "A") {
             stats[name].bigA += 1;
+            const labelA = dateStr ? dateStr : `Day ${day.day_index}`;
+            bigADays[name].push(labelA);
           }
           if (isBig && role === "D") {
             stats[name].bigD += 1;
-            const label = dateStr ? dateStr : `Day ${day.day_index}`;
-            bigDDays[name].push(label);
+            const labelD = dateStr ? dateStr : `Day ${day.day_index}`;
+            bigDDays[name].push(labelD);
           }
           // JS 的 Monday = 1
           if (weekday === 1 && role === "C" && name !== "在慶" && name !== "奕忠") {
@@ -422,6 +430,38 @@
 
       html += "</tbody></table>";
 
+      // ===== 大日 A 差異統計 =====
+      let totalBigA = 0;
+      names.forEach(name => {
+        totalBigA += stats[name].bigA;
+      });
+      const avgBigA = names.length ? (totalBigA / names.length) : 0;
+
+      html += "<h3>⛰ 大日 A 平衡檢視</h3>";
+      html += "<table><thead><tr>";
+      html += "<th>人員</th><th>大日 A 次數</th><th>與平均差異</th>";
+      html += "</tr></thead><tbody>";
+
+      names.forEach(name => {
+        const countA = stats[name].bigA;
+        const diffA = (countA - avgBigA).toFixed(2);
+        html += "<tr>";
+        html += `<td>${name}</td>`;
+        html += `<td>${countA}</td>`;
+        html += `<td>${diffA}</td>`;
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+
+      // ===== 大日 A 詳細日期 =====
+      html += "<h3>📅 各人「大日 A」日期明細</h3>";
+      names.forEach(name => {
+        const daysA = bigADays[name];
+        const lineA = daysA.length ? daysA.join("、") : "（本期無大日 A）";
+        html += `<p>${name}：${lineA}</p>`;
+      });
+
       // ===== 大日 D 差異統計 =====
       let totalBigD = 0;
       names.forEach(name => {
@@ -436,11 +476,11 @@
 
       names.forEach(name => {
         const countD = stats[name].bigD;
-        const diff = (countD - avgBigD).toFixed(2);
+        const diffD = (countD - avgBigD).toFixed(2);
         html += "<tr>";
         html += `<td>${name}</td>`;
         html += `<td>${countD}</td>`;
-        html += `<td>${diff}</td>`;
+        html += `<td>${diffD}</td>`;
         html += "</tr>";
       });
 
@@ -449,9 +489,9 @@
       // ===== 大日 D 詳細日期 =====
       html += "<h3>📅 各人「大日 D」日期明細</h3>";
       names.forEach(name => {
-        const days = bigDDays[name];
-        const line = days.length ? days.join("、") : "（本期無大日 D）";
-        html += `<p>${name}：${line}</p>`;
+        const daysD = bigDDays[name];
+        const lineD = daysD.length ? daysD.join("、") : "（本期無大日 D）";
+        html += `<p>${name}：${lineD}</p>`;
       });
 
       content.innerHTML = html;
