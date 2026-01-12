@@ -9,9 +9,6 @@ from openpyxl import Workbook
 app = Flask(__name__)
 
 
-# -----------------------------
-# 首頁：多日排班 UI
-# -----------------------------
 @app.route("/")
 def index():
     return render_template("index.html", employees=EMPLOYEES)
@@ -34,26 +31,18 @@ def api_schedule():
 
 
 # -----------------------------
-# 多日排班 API（主力）
+# 第一階段：多日自動排班（只排非 manual / 非停爐）
+# 前端送：
+# {
+#   "days":[
+#     {"date":"2026-01-01","manual":false,"no_burn":false,"vacations":["子紘","紀龍"]},
+#     {"date":"2026-01-02","manual":true,"no_burn":false,"vacations":[]},
+#     {"date":"2026-01-03","manual":false,"no_burn":true,"vacations":[]}
+#   ]
+# }
 # -----------------------------
 @app.route("/api/schedule_range", methods=["POST"])
 def api_schedule_range():
-    """
-    接收多天排班需求。
-
-    request JSON 格式預期為：
-    {
-      "days": [
-        {
-          "date": "2025-12-01",
-          "employees": ["豐杰", "在慶"],
-          "full_staff": false,
-          "big_day": true
-        },
-        ...
-      ]
-    }
-    """
     data = request.get_json()
     days = data.get("days", [])
 
@@ -62,10 +51,7 @@ def api_schedule_range():
 
     days_info = []
     for day in days:
-        full_staff = day.get("full_staff", False)
-        big_day = day.get("big_day", False)
         date_str = day.get("date")
-
         if not date_str:
             return jsonify({"error": "缺少日期資訊"}), 400
 
@@ -75,55 +61,113 @@ def api_schedule_range():
             return jsonify({"error": f"日期格式錯誤：{date_str}"}), 400
 
         weekday = dt.weekday()  # Monday=0 ... Sunday=6
+        manual = bool(day.get("manual", False))
+        no_burn = bool(day.get("no_burn", False))
 
-        if full_staff:
-            emps = EMPLOYEES[:]  # 全員到齊
+        vacations = day.get("vacations", []) or []
+        vacations = [v for v in vacations if v in EMPLOYEES]
+
+        # auto day：員工 = 全員 - 休假
+        # manual/no_burn：第一階段不排，employees 可不帶或留空
+        if (not manual) and (not no_burn):
+            emps = [e for e in EMPLOYEES if e not in vacations]
         else:
-            emps = day.get("employees", [])
-            if not emps:
-                return jsonify({"error": f"{date_str} 沒有勾任何上班人，且未勾 full_staff"}), 400
+            emps = []
 
         days_info.append({
             "date": date_str,
             "weekday": weekday,
-            "big_day": bool(big_day),
+            "manual": manual,
+            "no_burn": no_burn,
+            "vacations": vacations,
             "employees": emps,
         })
 
-    # 用你最後版的演算法排整段
     schedule = generate_period(days_info)
 
-    # 回傳時把 date / big_day 一起帶回去，方便前端顯示與統計
     result = []
     for idx, assign in enumerate(schedule):
-        day_meta = days_info[idx]
+        meta = days_info[idx]
         result.append({
             "day_index": idx + 1,
-            "date": day_meta["date"],
-            "big_day": bool(day_meta.get("big_day", False)),
+            "date": meta["date"],
+            "manual": bool(meta["manual"]),
+            "no_burn": bool(meta["no_burn"]),
+            "vacations": meta.get("vacations", []),
             "assignment": assign,
         })
 
     return jsonify({"schedule": result})
 
 
+# -----------------------------
+# 第二階段：合併手動排班
+# 前端送：
+# {
+#   "auto_schedule":[ ...第一階段回傳的 schedule... ],
+#   "manual_assignments":[
+#     {"date":"2026-01-02","assignment":{"豐杰":"A","在慶":"C","子紘":"","奕忠":"E",...}}
+#   ]
+# }
+# 規則：手動 assignment 裡，空字串/None/"休假" 代表不排（=休假）
+# -----------------------------
+@app.route("/api/merge_manual", methods=["POST"])
+def api_merge_manual():
+    data = request.get_json()
+    auto_schedule = data.get("auto_schedule", []) or []
+    manual_assignments = data.get("manual_assignments", []) or []
+
+    manual_map = {}
+    for item in manual_assignments:
+        d = item.get("date")
+        a = item.get("assignment", {}) or {}
+        if not d:
+            continue
+        # 清理：只保留有效員工 + 有效角色
+        cleaned = {}
+        for name, role in a.items():
+            if name not in EMPLOYEES:
+                continue
+            if role is None:
+                continue
+            role = str(role).strip()
+            if role == "" or role == "休假":
+                continue
+            # 允許 A/B/C/D/E
+            if role in ("A", "B", "C", "D", "E"):
+                cleaned[name] = role
+        manual_map[d] = cleaned
+
+    merged = []
+    for day in auto_schedule:
+        date_str = day.get("date", "")
+        manual = bool(day.get("manual", False))
+        no_burn = bool(day.get("no_burn", False))
+
+        assignment = day.get("assignment", {}) or {}
+
+        if no_burn:
+            assignment = {}
+        elif manual:
+            assignment = manual_map.get(date_str, {})
+
+        merged.append({
+            "day_index": day.get("day_index"),
+            "date": date_str,
+            "manual": manual,
+            "no_burn": no_burn,
+            "vacations": day.get("vacations", []),
+            "assignment": assignment,
+        })
+
+    return jsonify({"schedule": merged})
+
 
 # -----------------------------
-# 匯出 Excel API
+# 匯出 Excel API（吃「最終 schedule」）
 # -----------------------------
 @app.route("/api/export_excel", methods=["POST"])
 def export_excel():
-    """
-    期待前端傳來：
-    {
-      "schedule": [
-        { "day_index": 1, "date": "...", "assignment": {...}, ... },
-        ...
-      ],
-      "start_date": "2024-11-09",
-      "end_date": "2024-12-06"
-    }
-    """
     data = request.get_json()
     schedule = data.get("schedule", [])
     start_date = data.get("start_date", "")
@@ -138,31 +182,40 @@ def export_excel():
         day_index = day.get("day_index")
         date_str = day.get("date", "")
         assignment = day.get("assignment", {}) or {}
+        manual = bool(day.get("manual", False))
+        no_burn = bool(day.get("no_burn", False))
 
-        # Day n + 日期
+        tag = ""
+        if no_burn:
+            tag = "（停爐）"
+        elif manual:
+            tag = "（手動）"
+
         if date_str:
-            ws.cell(row=row, column=1, value=f"Day {day_index}  ({date_str})")
+            ws.cell(row=row, column=1, value=f"Day {day_index}  ({date_str}){tag}")
         else:
-            ws.cell(row=row, column=1, value=f"Day {day_index}")
+            ws.cell(row=row, column=1, value=f"Day {day_index}{tag}")
         row += 1
 
-        # 依姓名排序
+        if not assignment:
+            ws.cell(row=row, column=1, value="（無排班）")
+            row += 2
+            continue
+
         for name in sorted(assignment.keys()):
             role = assignment[name]
             ws.cell(row=row, column=1, value=f"{name}：{role}")
             row += 1
 
-        # 空一行
-        row += 1
+        row += 1  # 空一行
 
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
 
+    filename = "schedule.xlsx"
     if start_date and end_date:
         filename = f"schedule_{start_date}_to_{end_date}.xlsx"
-    else:
-        filename = "schedule.xlsx"
 
     return send_file(
         output,

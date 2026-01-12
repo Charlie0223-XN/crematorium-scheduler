@@ -2,16 +2,14 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>火葬場排班 AI（多日版）</title>
+  <title>火葬場排班輔助系統</title>
   <style>
     body {
       font-family: "Microsoft JhengHei", sans-serif;
       padding: 20px;
       background: #f5f5f5;
     }
-    h1 {
-      margin-bottom: 10px;
-    }
+    h1 { margin-bottom: 10px; }
     .control-panel, .result-panel {
       background: #ffffff;
       padding: 16px;
@@ -19,15 +17,9 @@
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.08);
     }
-    .field-row {
-      margin-bottom: 10px;
-    }
-    label {
-      margin-right: 8px;
-    }
-    .days-container {
-      margin-top: 10px;
-    }
+    .field-row { margin-bottom: 10px; }
+    label { margin-right: 8px; }
+    .days-container { margin-top: 10px; }
     .day-block {
       background: #fafafa;
       border: 1px solid #ddd;
@@ -41,6 +33,14 @@
       justify-content: space-between;
       margin-bottom: 6px;
       font-weight: bold;
+      gap: 10px;
+    }
+    .day-header .right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-weight: normal;
     }
     .emp-list {
       display: flex;
@@ -73,9 +73,7 @@
       padding-bottom: 8px;
       border-bottom: 1px solid #ddd;
     }
-    .result-day h3 {
-      margin: 0 0 4px 0;
-    }
+    .result-day h3 { margin: 0 0 4px 0; }
     pre {
       white-space: pre-wrap;
       font-size: 13px;
@@ -94,13 +92,61 @@
       padding: 4px 6px;
       text-align: center;
     }
-    th {
-      background: #f0f0f0;
+    th { background: #f0f0f0; }
+
+    .manual-panel {
+      display: none;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed #ddd;
+    }
+    .manual-day {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 10px;
+      margin: 10px 0;
+      background: #fff;
+    }
+    .manual-day h3 { margin: 0 0 8px 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .grid .cell {
+      border: 1px solid #eee;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fafafa;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+    select {
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background: #fff;
+    }
+    .hint {
+      font-size: 12px;
+      color: #555;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #eee;
+      margin-left: 6px;
+      font-weight: normal;
     }
   </style>
 </head>
 <body>
-  <h1>🔥 火葬場排班 AI（多日版）</h1>
+  <h1>🔥 火葬場排班輔助系統</h1>
 
   <div class="control-panel">
     <div class="field-row">
@@ -110,39 +156,55 @@
       <input type="date" id="end-date">
       <button type="button" onclick="buildDays()">建立日期列表</button>
     </div>
+
     <div class="field-row">
-      <small>說明：先選起始與結束日期 → 按「建立日期列表」→ 勾選每天誰有上班／是否禁休／是否大日 → 按「產生整段排班」。</small>
+      <small class="hint">
+        流程：先選日期 → 建立日期列表 →（每一天可勾：停爐 / 手動(特殊任務) / 勾休假）→
+        第一階段產生自動排班（只排非手動&非停爐）→
+        第二階段填手動日 → 整合成最終班表 → 匯出Excel。
+      </small>
     </div>
 
     <div id="days-container" class="days-container"></div>
 
     <div class="field-row">
-      <button type="button" id="generate-btn" onclick="generateSchedule()" disabled>
-        產生整段排班
+      <button type="button" id="generate-auto-btn" onclick="generateAutoSchedule()" disabled>
+        第一階段：產生自動排班
+      </button>
+      <button type="button" id="merge-btn" onclick="mergeManual()" disabled>
+        第二階段：套用手動並整合
       </button>
       <button type="button" id="export-btn" onclick="exportExcel()" disabled>
-        下載 Excel
+        下載 Excel（最終）
       </button>
+    </div>
+
+    <div id="manual-panel" class="manual-panel">
+      <h2>第二階段：手動日填寫區</h2>
+      <div class="hint">手動日：你自己指定 A/B/C/D/E；留空=休假（不排）。</div>
+      <div id="manual-content"></div>
     </div>
   </div>
 
   <div id="result-panel" class="result-panel" style="display:none;">
-    <h2>排班結果</h2>
+    <h2>排班結果（最終）</h2>
     <div id="result-content"></div>
   </div>
 
   <div id="stats-panel" class="result-panel" style="display:none;">
-    <h2>統計（每人 A/B/C/D/E、⛰大日 A/D、週一 C 次數 ＋ 大日 A/D 差異＆明細）</h2>
+    <h2>統計（最終班表：每人 A/B/C/D/E、週一 C 次數）</h2>
     <div id="stats-content"></div>
   </div>
 
   <script>
-    // 從後端帶來的員工名單
     const EMPLOYEES = {{ employees | tojson | safe }};
     const weekdayMap = ["日","一","二","三","四","五","六"];
 
-    // 上一次產生的排班結果 + 日期範圍（給匯出用）
-    window.lastSchedule = null;
+    // 第一階段結果（含 meta）
+    window.lastAutoSchedule = null;
+
+    // 最終結果（整合後）
+    window.lastFinalSchedule = null;
     window.lastStartDate = "";
     window.lastEndDate = "";
 
@@ -156,11 +218,17 @@
       const start = parseDateInput("start-date");
       const end = parseDateInput("end-date");
       const container = document.getElementById("days-container");
+
       container.innerHTML = "";
       document.getElementById("result-panel").style.display = "none";
       document.getElementById("stats-panel").style.display = "none";
+      document.getElementById("manual-panel").style.display = "none";
+
       document.getElementById("export-btn").disabled = true;
-      window.lastSchedule = null;
+      document.getElementById("merge-btn").disabled = true;
+
+      window.lastAutoSchedule = null;
+      window.lastFinalSchedule = null;
 
       if (!start || !end) {
         alert("請先選擇起始與結束日期。");
@@ -189,15 +257,16 @@
         header.className = "day-header";
         header.innerHTML = `
           <span>Day ${index}｜${dateStr}（週${w}）</span>
-          <div>
-            <label style="margin-right: 10px;">
-              <input type="checkbox" class="bigday-toggle">
-              大日
+          <div class="right">
+            <label>
+              <input type="checkbox" class="no-burn-toggle">
+              停爐
             </label>
             <label>
-              <input type="checkbox" class="full-staff-toggle">
-              禁休日（全員上班）
+              <input type="checkbox" class="manual-toggle">
+              手動（特殊任務）
             </label>
+            <span class="tag">勾休假（其餘=上班）</span>
           </div>
         `;
         block.appendChild(header);
@@ -209,7 +278,7 @@
           const label = document.createElement("label");
           label.className = "emp-item";
           label.innerHTML = `
-            <input type="checkbox" class="emp-checkbox" value="${name}">
+            <input type="checkbox" class="vac-checkbox" value="${name}">
             ${name}
           `;
           empList.appendChild(label);
@@ -218,34 +287,46 @@
         block.appendChild(empList);
         container.appendChild(block);
 
-        const fullToggle = block.querySelector(".full-staff-toggle");
-        fullToggle.addEventListener("change", () => {
-          const checkboxes = block.querySelectorAll(".emp-checkbox");
-          checkboxes.forEach(cb => {
-            cb.checked = fullToggle.checked;
-          });
-        });
+        // 互斥/禁用規則
+        const manualToggle = block.querySelector(".manual-toggle");
+        const noBurnToggle = block.querySelector(".no-burn-toggle");
+        const vacChecks = block.querySelectorAll(".vac-checkbox");
 
-        const empCheckboxes = block.querySelectorAll(".emp-checkbox");
-        empCheckboxes.forEach(cb => {
-          cb.addEventListener("change", () => {
-            const allChecked = Array.from(empCheckboxes).every(x => x.checked);
-            fullToggle.checked = allChecked;
-          });
-        });
+        function refreshDisableState() {
+          const manual = manualToggle.checked;
+          const noBurn = noBurnToggle.checked;
+
+          // 停爐時：不能手動/不能勾休假
+          if (noBurn) {
+            manualToggle.checked = false;
+            manualToggle.disabled = true;
+            vacChecks.forEach(cb => { cb.checked = false; cb.disabled = true; });
+            return;
+          } else {
+            manualToggle.disabled = false;
+          }
+
+          // 手動時：休假勾選不使用（禁用）
+          if (manual) {
+            vacChecks.forEach(cb => { cb.checked = false; cb.disabled = true; });
+          } else {
+            vacChecks.forEach(cb => { cb.disabled = false; });
+          }
+        }
+
+        manualToggle.addEventListener("change", refreshDisableState);
+        noBurnToggle.addEventListener("change", refreshDisableState);
+
+        refreshDisableState();
 
         current.setDate(current.getDate() + 1);
         index++;
       }
 
-      if (index > 1) {
-        document.getElementById("generate-btn").disabled = false;
-      } else {
-        document.getElementById("generate-btn").disabled = true;
-      }
+      document.getElementById("generate-auto-btn").disabled = index <= 1;
     }
 
-    async function generateSchedule() {
+    async function generateAutoSchedule() {
       const container = document.getElementById("days-container");
       const blocks = container.querySelectorAll(".day-block");
       if (!blocks.length) {
@@ -254,25 +335,23 @@
       }
 
       const payloadDays = [];
-
       blocks.forEach(block => {
-        const fullToggle = block.querySelector(".full-staff-toggle");
-        const bigToggle = block.querySelector(".bigday-toggle");
-        const empCheckboxes = block.querySelectorAll(".emp-checkbox");
         const dateStr = block.dataset.date;
+        const manual = block.querySelector(".manual-toggle").checked;
+        const noBurn = block.querySelector(".no-burn-toggle").checked;
 
-        let emps = [];
-        if (!fullToggle.checked) {
-          empCheckboxes.forEach(cb => {
-            if (cb.checked) emps.push(cb.value);
+        const vacations = [];
+        if (!manual && !noBurn) {
+          block.querySelectorAll(".vac-checkbox").forEach(cb => {
+            if (cb.checked) vacations.push(cb.value);
           });
         }
 
         payloadDays.push({
           date: dateStr,
-          big_day: bigToggle.checked,
-          full_staff: fullToggle.checked,
-          employees: emps
+          manual: manual,
+          no_burn: noBurn,
+          vacations: vacations
         });
       });
 
@@ -283,42 +362,176 @@
       });
 
       const data = await resp.json();
-      const panel = document.getElementById("result-panel");
-      const content = document.getElementById("result-content");
-
       if (!resp.ok || data.error) {
-        panel.style.display = "block";
-        content.innerHTML = `<p style="color:red;">錯誤：${data.error || "未知錯誤"}</p>`;
-        document.getElementById("export-btn").disabled = true;
-        document.getElementById("stats-panel").style.display = "none";
+        alert(`錯誤：${data.error || "未知錯誤"}`);
         return;
       }
 
       const schedule = data.schedule || [];
-      window.lastSchedule = schedule;
+      window.lastAutoSchedule = schedule;
+      window.lastFinalSchedule = null;
+
       window.lastStartDate = document.getElementById("start-date").value;
       window.lastEndDate = document.getElementById("end-date").value;
-      document.getElementById("export-btn").disabled = schedule.length === 0;
+
+      // 顯示第一階段結果（暫時）
+      renderResult(schedule, true);
+
+      // 生成手動區
+      buildManualPanel(schedule);
+
+      // 如果沒有任何手動日，直接把第一階段當最終
+      const hasManual = schedule.some(d => !!d.manual && !d.no_burn);
+      if (!hasManual) {
+        window.lastFinalSchedule = schedule;
+        document.getElementById("merge-btn").disabled = true;
+        document.getElementById("export-btn").disabled = schedule.length === 0;
+        renderStats(schedule);
+      } else {
+        document.getElementById("merge-btn").disabled = false;
+        document.getElementById("export-btn").disabled = true; // 要等整合後
+        document.getElementById("stats-panel").style.display = "none";
+      }
+    }
+
+    function renderResult(schedule, isStage1) {
+      const panel = document.getElementById("result-panel");
+      const content = document.getElementById("result-content");
 
       let html = "";
       schedule.forEach(day => {
-        html += `<div class="result-day">`;
         const dateLabel = day.date ? `｜${day.date}` : "";
-        const bigLabel = day.big_day ? "（大日）" : "";
-        html += `<h3>Day ${day.day_index}${dateLabel}${bigLabel}</h3>`;
+        let tag = "";
+        if (day.no_burn) tag = "（停爐）";
+        else if (day.manual) tag = "（手動待排）";
+
+        html += `<div class="result-day">`;
+        html += `<h3>Day ${day.day_index}${dateLabel}${tag}</h3>`;
         html += `<pre>`;
-        for (const [name, pos] of Object.entries(day.assignment)) {
-          html += `${name}：${pos}\n`;
+
+        const entries = Object.entries(day.assignment || {});
+        if (!entries.length) {
+          html += `（無排班）\n`;
+        } else {
+          for (const [name, pos] of entries) {
+            html += `${name}：${pos}\n`;
+          }
         }
+
+        if (isStage1 && !day.manual && !day.no_burn) {
+          const vac = (day.vacations || []);
+          if (vac.length) {
+            html += `\n休假：${vac.join("、")}\n`;
+          } else {
+            html += `\n休假：無\n`;
+          }
+        }
+
         html += `</pre>`;
         html += `</div>`;
       });
 
       panel.style.display = "block";
       content.innerHTML = html;
+    }
 
-      // 產生統計表 + 大日A/D差異
-      renderStats(schedule);
+    function buildManualPanel(schedule) {
+      const panel = document.getElementById("manual-panel");
+      const content = document.getElementById("manual-content");
+      content.innerHTML = "";
+
+      const manualDays = schedule.filter(d => !!d.manual && !d.no_burn);
+      if (!manualDays.length) {
+        panel.style.display = "none";
+        return;
+      }
+
+      manualDays.forEach(day => {
+        const wrap = document.createElement("div");
+        wrap.className = "manual-day";
+        wrap.dataset.date = day.date;
+
+        wrap.innerHTML = `
+          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動（留空=休假）</span></h3>
+          <div class="grid"></div>
+        `;
+
+        const grid = wrap.querySelector(".grid");
+
+        EMPLOYEES.forEach(name => {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.innerHTML = `
+            <span>${name}</span>
+            <select class="role-select" data-name="${name}">
+              <option value="">（留空=休假）</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          `;
+          grid.appendChild(cell);
+        });
+
+        // 小保護：在慶/奕忠預填（你也可以改掉）
+        const zaiqing = wrap.querySelector(`select[data-name="在慶"]`);
+        if (zaiqing) zaiqing.value = "C";
+        const yizhong = wrap.querySelector(`select[data-name="奕忠"]`);
+        if (yizhong) yizhong.value = "E";
+
+        content.appendChild(wrap);
+      });
+
+      panel.style.display = "block";
+    }
+
+    async function mergeManual() {
+      if (!window.lastAutoSchedule || !window.lastAutoSchedule.length) {
+        alert("請先完成第一階段自動排班。");
+        return;
+      }
+
+      // 收集手動填寫
+      const manualAssignments = [];
+      document.querySelectorAll(".manual-day").forEach(dayBlock => {
+        const date = dayBlock.dataset.date;
+        const assignment = {};
+
+        dayBlock.querySelectorAll(".role-select").forEach(sel => {
+          const name = sel.dataset.name;
+          assignment[name] = sel.value; // 空字串 = 休假
+        });
+
+        manualAssignments.push({ date, assignment });
+      });
+
+      const resp = await fetch("/api/merge_manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auto_schedule: window.lastAutoSchedule,
+          manual_assignments: manualAssignments
+        })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        alert(`錯誤：${data.error || "未知錯誤"}`);
+        return;
+      }
+
+      const finalSchedule = data.schedule || [];
+      window.lastFinalSchedule = finalSchedule;
+
+      // 顯示最終結果
+      renderResult(finalSchedule, false);
+
+      // 統計（最終）
+      renderStats(finalSchedule);
+
+      document.getElementById("export-btn").disabled = finalSchedule.length === 0;
     }
 
     function renderStats(schedule) {
@@ -331,85 +544,40 @@
         return;
       }
 
-      // 初始化統計 & 大日A/D日期紀錄
       const stats = {};
-      const bigDDays = {}; // 記錄每個人 大日D 是哪幾天
-      const bigADays = {}; // 記錄每個人 大日A 是哪幾天
-
       EMPLOYEES.forEach(name => {
-        stats[name] = {
-          total: 0,
-          A: 0,
-          B: 0,
-          C: 0,
-          D: 0,
-          E: 0,
-          bigA: 0,
-          bigD: 0,
-          monC: 0,
-        };
-        bigDDays[name] = [];
-        bigADays[name] = [];
+        stats[name] = { total: 0, A: 0, B: 0, C: 0, D: 0, E: 0, monC: 0 };
       });
 
       schedule.forEach(day => {
         const dateStr = day.date;
-        const isBig = !!day.big_day;
-
         let weekday = null; // 0=日,1=一,...6=六
         if (dateStr) {
           const d = new Date(dateStr + "T00:00:00");
-          if (!isNaN(d.getTime())) {
-            weekday = d.getDay();
-          }
+          if (!isNaN(d.getTime())) weekday = d.getDay();
         }
 
-        for (const [name, role] of Object.entries(day.assignment)) {
-          if (!stats[name]) {
-            stats[name] = {
-              total: 0,
-              A: 0, B: 0, C: 0, D: 0, E: 0,
-              bigA: 0, bigD: 0, monC: 0,
-            };
-          }
-          if (!bigDDays[name]) {
-            bigDDays[name] = [];
-          }
-          if (!bigADays[name]) {
-            bigADays[name] = [];
-          }
+        for (const [name, role] of Object.entries(day.assignment || {})) {
+          if (!stats[name]) continue;
+          if (!["A","B","C","D","E"].includes(role)) continue;
 
           stats[name].total += 1;
-          if (stats[name][role] !== undefined) {
-            stats[name][role] += 1;
-          }
+          stats[name][role] += 1;
 
-          if (isBig && role === "A") {
-            stats[name].bigA += 1;
-            const labelA = dateStr ? dateStr : `Day ${day.day_index}`;
-            bigADays[name].push(labelA);
-          }
-          if (isBig && role === "D") {
-            stats[name].bigD += 1;
-            const labelD = dateStr ? dateStr : `Day ${day.day_index}`;
-            bigDDays[name].push(labelD);
-          }
-          // JS 的 Monday = 1
+          // JS Monday=1
           if (weekday === 1 && role === "C" && name !== "在慶" && name !== "奕忠") {
             stats[name].monC += 1;
           }
         }
       });
 
-      const names = Object.keys(stats).sort((a, b) =>
-        a.localeCompare(b, "zh-Hant")
-      );
+      const names = Object.keys(stats).sort((a,b)=>a.localeCompare(b,"zh-Hant"));
 
       let html = "<table><thead><tr>";
       html += "<th>人員</th>";
       html += "<th>總班數</th>";
       html += "<th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>";
-      html += "<th>大日 A</th><th>大日 D</th><th>週一 C</th>";
+      html += "<th>週一 C</th>";
       html += "</tr></thead><tbody>";
 
       names.forEach(name => {
@@ -422,85 +590,20 @@
         html += `<td>${s.C}</td>`;
         html += `<td>${s.D}</td>`;
         html += `<td>${s.E}</td>`;
-        html += `<td>${s.bigA}</td>`;
-        html += `<td>${s.bigD}</td>`;
         html += `<td>${s.monC}</td>`;
         html += "</tr>";
       });
 
       html += "</tbody></table>";
 
-      // ===== 大日 A 差異統計 =====
-      let totalBigA = 0;
-      names.forEach(name => {
-        totalBigA += stats[name].bigA;
-      });
-      const avgBigA = names.length ? (totalBigA / names.length) : 0;
-
-      html += "<h3>⛰ 大日 A 平衡檢視</h3>";
-      html += "<table><thead><tr>";
-      html += "<th>人員</th><th>大日 A 次數</th><th>與平均差異</th>";
-      html += "</tr></thead><tbody>";
-
-      names.forEach(name => {
-        const countA = stats[name].bigA;
-        const diffA = (countA - avgBigA).toFixed(2);
-        html += "<tr>";
-        html += `<td>${name}</td>`;
-        html += `<td>${countA}</td>`;
-        html += `<td>${diffA}</td>`;
-        html += "</tr>";
-      });
-
-      html += "</tbody></table>";
-
-      // ===== 大日 A 詳細日期 =====
-      html += "<h3>📅 各人「大日 A」日期明細</h3>";
-      names.forEach(name => {
-        const daysA = bigADays[name];
-        const lineA = daysA.length ? daysA.join("、") : "（本期無大日 A）";
-        html += `<p>${name}：${lineA}</p>`;
-      });
-
-      // ===== 大日 D 差異統計 =====
-      let totalBigD = 0;
-      names.forEach(name => {
-        totalBigD += stats[name].bigD;
-      });
-      const avgBigD = names.length ? (totalBigD / names.length) : 0;
-
-      html += "<h3>⛰ 大日 D 平衡檢視</h3>";
-      html += "<table><thead><tr>";
-      html += "<th>人員</th><th>大日 D 次數</th><th>與平均差異</th>";
-      html += "</tr></thead><tbody>";
-
-      names.forEach(name => {
-        const countD = stats[name].bigD;
-        const diffD = (countD - avgBigD).toFixed(2);
-        html += "<tr>";
-        html += `<td>${name}</td>`;
-        html += `<td>${countD}</td>`;
-        html += `<td>${diffD}</td>`;
-        html += "</tr>";
-      });
-
-      html += "</tbody></table>";
-
-      // ===== 大日 D 詳細日期 =====
-      html += "<h3>📅 各人「大日 D」日期明細</h3>";
-      names.forEach(name => {
-        const daysD = bigDDays[name];
-        const lineD = daysD.length ? daysD.join("、") : "（本期無大日 D）";
-        html += `<p>${name}：${lineD}</p>`;
-      });
-
       content.innerHTML = html;
       panel.style.display = "block";
     }
 
     async function exportExcel() {
-      if (!window.lastSchedule || !window.lastSchedule.length) {
-        alert("請先產生排班，再下載 Excel。");
+      const schedule = window.lastFinalSchedule;
+      if (!schedule || !schedule.length) {
+        alert("請先完成整合（第二階段），再下載 Excel。");
         return;
       }
 
@@ -511,7 +614,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          schedule: window.lastSchedule,
+          schedule: schedule,
           start_date: startDate,
           end_date: endDate
         })
@@ -526,7 +629,7 @@
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "";  // 檔名由後端 headers 控制
+      a.download = "";
       document.body.appendChild(a);
       a.click();
       a.remove();

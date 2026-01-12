@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Dict, Any, Tuple
 
 # 員工名單
-EMPLOYEES = ["豐杰", "在慶", "學林", "奕忠", "子紘", "紀龍", "孟桓", "立群", "天立"]
+EMPLOYEES = ["豐杰", "孟桓", "立群", "學林", "天立", "在慶", "奕忠", "紀龍", "子紘"]
 ROLES = ["A", "B", "C", "D", "E"]
 
 SPECIAL_C = "在慶"
@@ -14,10 +14,9 @@ SPECIAL_E = "奕忠"
 # ----------------------------------------------------
 def _build_role_pool_for_day(employees: List[str]) -> Tuple[List[str], List[str]]:
     """產生當天的 A/B/C/D 需求（不含E）"""
-
     base_staff = [e for e in employees if e != SPECIAL_E]  # 奕忠不進一般角色池
     n = len(base_staff)
-    roles = []
+    roles: List[str] = []
 
     if n <= 0:
         return roles, base_staff
@@ -51,41 +50,28 @@ def _build_role_pool_for_day(employees: List[str]) -> Tuple[List[str], List[str]
 
 
 # ----------------------------------------------------
-# 分數計算（沒有倫理模型）
+# 分數計算：平均 + 疲勞模型 + 週一C平均（排除在慶/奕忠）
 # ----------------------------------------------------
 def _score_full_assignment(
     day_meta: Dict[str, Any],
     assignment: Dict[str, str],
     prev_assignment: Dict[str, str],
     role_counts: Dict[str, Dict[str, int]],
-    bigA_counts: Dict[str, int],
-    bigD_counts: Dict[str, int],
     monC_counts: Dict[str, int],
 ) -> float:
-
     score = 0.0
-    big_day = bool(day_meta.get("big_day", False))
     weekday = int(day_meta.get("weekday", 0))  # Monday = 0
 
     # 權重（可調整）
     w_role_balance = 0.5
-    w_bigA = 3.5
-    w_bigD = 3.0
     w_monC = 5.0
     fatigue_B_bonus = 2.5
     fatigue_A_bonus = 1.5
 
     for name, role in assignment.items():
-
         # 排班次數越多 → 越扣分（平均）
         prev_count = role_counts[name].get(role, 0)
         score -= w_role_balance * prev_count
-
-        # 大日 A、D 的平均
-        if big_day and role == "A":
-            score -= w_bigA * bigA_counts[name]
-        if big_day and role == "D":
-            score -= w_bigD * bigD_counts[name]
 
         # 週一 C 平均（排除在慶、奕忠）
         if weekday == 0 and role == "C" and name not in (SPECIAL_C, SPECIAL_E):
@@ -109,12 +95,9 @@ def _assign_one_day(
     day_meta: Dict[str, Any],
     prev_assignment: Dict[str, str],
     role_counts: Dict[str, Dict[str, int]],
-    bigA_counts: Dict[str, int],
-    bigD_counts: Dict[str, int],
     monC_counts: Dict[str, int],
 ) -> Dict[str, str]:
-
-    employees = day_meta["employees"]
+    employees = day_meta.get("employees", []) or []
     if not employees:
         return {}
 
@@ -126,8 +109,7 @@ def _assign_one_day(
         must_C.add(SPECIAL_C)
 
     best_score = None
-    best_assignment_partial = {}
-
+    best_assignment_partial: Dict[str, str] = {}
     base_staff_order = list(base_staff)  # 固定順序
 
     # DFS
@@ -143,7 +125,7 @@ def _assign_one_day(
 
             s = _score_full_assignment(
                 day_meta, temp_assignment, prev_assignment,
-                role_counts, bigA_counts, bigD_counts, monC_counts
+                role_counts, monC_counts
             )
 
             if best_score is None or s > best_score:
@@ -170,15 +152,14 @@ def _assign_one_day(
 
             new_assignment = dict(current_assignment)
             new_assignment[name] = r
-
-            new_remaining = remaining_roles[:i] + remaining_roles[i+1:]
+            new_remaining = remaining_roles[:i] + remaining_roles[i + 1:]
             dfs(idx + 1, new_assignment, new_remaining)
 
     dfs(0, {}, roles_pool)
 
     # 找不到（極罕見）→ fallback
     if best_score is None:
-        assignment = {}
+        assignment: Dict[str, str] = {}
         tmp = roles_pool[:]
         for name in base_staff:
             role = tmp.pop(0) if tmp else "C"
@@ -198,33 +179,49 @@ def _assign_one_day(
 
 
 # ----------------------------------------------------
-# 多日排班主體
+# 多日排班主體（只排 auto_day；manual/no_burn 回傳空）
+# day_meta 預期：
+# {
+#   "date": "YYYY-MM-DD",
+#   "weekday": 0..6 (Mon=0),
+#   "manual": bool,
+#   "no_burn": bool,
+#   "employees": [...working employees...]   # auto day 才需要
+# }
 # ----------------------------------------------------
 def generate_period(days_info: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     role_counts = {e: {r: 0 for r in ROLES} for e in EMPLOYEES}
-    bigA_counts = {e: 0 for e in EMPLOYEES}
-    bigD_counts = {e: 0 for e in EMPLOYEES}
     monC_counts = {e: 0 for e in EMPLOYEES}
 
-    schedule = []
-    prev_assignment = {}
+    schedule: List[Dict[str, str]] = []
+    prev_assignment: Dict[str, str] = {}
 
     for day_meta in days_info:
+        manual = bool(day_meta.get("manual", False))
+        no_burn = bool(day_meta.get("no_burn", False))
+
+        if no_burn:
+            # 停爐：當天沒有排班；疲勞也視為中斷（隔天不套用昨日C）
+            schedule.append({})
+            prev_assignment = {}
+            continue
+
+        if manual:
+            # 手動日：第一階段不排（第二階段由你填）
+            schedule.append({})
+            # 手動日不應該影響疲勞：視為中斷
+            prev_assignment = {}
+            continue
+
         assignment = _assign_one_day(
             day_meta, prev_assignment,
-            role_counts, bigA_counts, bigD_counts, monC_counts
+            role_counts, monC_counts
         )
         schedule.append(assignment)
 
-        big_day = bool(day_meta.get("big_day", False))
         weekday = int(day_meta.get("weekday", 0))
-
         for name, role in assignment.items():
             role_counts[name][role] += 1
-            if big_day and role == "A":
-                bigA_counts[name] += 1
-            if big_day and role == "D":
-                bigD_counts[name] += 1
             if weekday == 0 and role == "C" and name not in (SPECIAL_C, SPECIAL_E):
                 monC_counts[name] += 1
 
@@ -234,7 +231,7 @@ def generate_period(days_info: List[Dict[str, Any]]) -> List[Dict[str, str]]:
 
 
 # ----------------------------------------------------
-# 單日 demo
+# 單日 demo（保留）
 # ----------------------------------------------------
 def generate_day(employees: List[str], prev_day=None):
     if prev_day is None:
@@ -243,23 +240,22 @@ def generate_day(employees: List[str], prev_day=None):
     day_meta = {
         "date": "1970-01-01",
         "weekday": 0,
-        "big_day": False,
+        "manual": False,
+        "no_burn": False,
         "employees": employees,
     }
 
     role_counts = {e: {r: 0 for r in ROLES} for e in EMPLOYEES}
-    bigA_counts = {e: 0 for e in EMPLOYEES}
-    bigD_counts = {e: 0 for e in EMPLOYEES}
     monC_counts = {e: 0 for e in EMPLOYEES}
 
     assignment = _assign_one_day(
         day_meta, prev_day,
-        role_counts, bigA_counts, bigD_counts, monC_counts
+        role_counts, monC_counts
     )
 
     score = _score_full_assignment(
         day_meta, assignment, prev_day,
-        role_counts, bigA_counts, bigD_counts, monC_counts
+        role_counts, monC_counts
     )
 
     return assignment, score
