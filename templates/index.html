@@ -159,20 +159,21 @@
 
     <div class="field-row">
       <small class="hint">
-        流程：先選日期 → 建立日期列表 →（每一天可勾：停爐 / 手動(特殊任務) / 勾休假）→
-        第一階段產生自動排班（只排非手動&非停爐）→
-        第二階段填手動日 → 整合成最終班表 → 匯出Excel。
+        流程：先選日期 → 建立日期列表 →（每一天可勾：停爐 / 手動 / 勾休假）→
+        點「下一步：進入手動填寫」（只針對你勾了手動的日子）→
+        手動日：你用下拉指定「部分人/部分崗位」，沒選的 = 交給系統自動補排；可用「休假」讓某人當天不上班 →
+        最後按「產生最終班表」（一次性產出完整排班）→ 匯出 Excel。
       </small>
     </div>
 
     <div id="days-container" class="days-container"></div>
 
     <div class="field-row">
-      <button type="button" id="generate-auto-btn" onclick="generateAutoSchedule()" disabled>
-        第一階段：產生自動排班
+      <button type="button" id="enter-manual-btn" onclick="enterManualStage()" disabled>
+        下一步：進入手動填寫
       </button>
-      <button type="button" id="merge-btn" onclick="mergeManual()" disabled>
-        第二階段：套用手動並整合
+      <button type="button" id="generate-final-btn" onclick="generateFinalSchedule()" disabled>
+        產生最終班表（一次完成）
       </button>
       <button type="button" id="export-btn" onclick="exportExcel()" disabled>
         下載 Excel（最終）
@@ -180,8 +181,13 @@
     </div>
 
     <div id="manual-panel" class="manual-panel">
-      <h2>第二階段：手動日填寫區</h2>
-      <div class="hint">手動日：你自己指定 A/B/C/D/E；留空=休假（不排）。</div>
+      <h2>手動日填寫區（局部指定＋自動補排）</h2>
+      <div class="hint">
+        下拉選單說明：<br>
+        ・「（交給系統自動）」= 這個人當天交給系統安排崗位<br>
+        ・「休假」= 這個人當天不上班<br>
+        ・A/B/C/D/E = 你指定此人崗位（系統會尊重並補齊其餘人員）
+      </div>
       <div id="manual-content"></div>
     </div>
   </div>
@@ -199,9 +205,6 @@
   <script>
     const EMPLOYEES = {{ employees | tojson | safe }};
     const weekdayMap = ["日","一","二","三","四","五","六"];
-
-    // 第一階段結果（含 meta）
-    window.lastAutoSchedule = null;
 
     // 最終結果（整合後）
     window.lastFinalSchedule = null;
@@ -225,9 +228,9 @@
       document.getElementById("manual-panel").style.display = "none";
 
       document.getElementById("export-btn").disabled = true;
-      document.getElementById("merge-btn").disabled = true;
+      document.getElementById("generate-final-btn").disabled = true;
+      document.getElementById("enter-manual-btn").disabled = true;
 
-      window.lastAutoSchedule = null;
       window.lastFinalSchedule = null;
 
       if (!start || !end) {
@@ -264,9 +267,9 @@
             </label>
             <label>
               <input type="checkbox" class="manual-toggle">
-              手動（特殊任務）
+              手動
             </label>
-            <span class="tag">勾休假（其餘=上班）</span>
+            <span class="tag">非手動日：勾休假（其餘=上班）</span>
           </div>
         `;
         block.appendChild(header);
@@ -314,8 +317,18 @@
           }
         }
 
-        manualToggle.addEventListener("change", refreshDisableState);
-        noBurnToggle.addEventListener("change", refreshDisableState);
+        manualToggle.addEventListener("change", () => {
+          refreshDisableState();
+          // 手動狀態變更後，手動面板需要重建（避免日期不同步）
+          document.getElementById("manual-panel").style.display = "none";
+          document.getElementById("generate-final-btn").disabled = true;
+        });
+
+        noBurnToggle.addEventListener("change", () => {
+          refreshDisableState();
+          document.getElementById("manual-panel").style.display = "none";
+          document.getElementById("generate-final-btn").disabled = true;
+        });
 
         refreshDisableState();
 
@@ -323,10 +336,11 @@
         index++;
       }
 
-      document.getElementById("generate-auto-btn").disabled = index <= 1;
+      // 有日期就可以下一步
+      document.getElementById("enter-manual-btn").disabled = index <= 1;
     }
 
-    async function generateAutoSchedule() {
+    function enterManualStage() {
       const container = document.getElementById("days-container");
       const blocks = container.querySelectorAll(".day-block");
       if (!blocks.length) {
@@ -334,6 +348,84 @@
         return;
       }
 
+      // 建立手動面板（只針對勾手動、且非停爐）
+      const manualDays = [];
+      blocks.forEach((block, i) => {
+        const dateStr = block.dataset.date;
+        const manual = block.querySelector(".manual-toggle").checked;
+        const noBurn = block.querySelector(".no-burn-toggle").checked;
+        if (manual && !noBurn) {
+          manualDays.push({ day_index: i + 1, date: dateStr });
+        }
+      });
+
+      buildManualPanel(manualDays);
+
+      // 無論有沒有手動日，都可以產生最終（沒有手動就直接全自動）
+      document.getElementById("generate-final-btn").disabled = false;
+    }
+
+    function buildManualPanel(manualDays) {
+      const panel = document.getElementById("manual-panel");
+      const content = document.getElementById("manual-content");
+      content.innerHTML = "";
+
+      if (!manualDays.length) {
+        panel.style.display = "none";
+        return;
+      }
+
+      manualDays.forEach(day => {
+        const wrap = document.createElement("div");
+        wrap.className = "manual-day";
+        wrap.dataset.date = day.date;
+
+        wrap.innerHTML = `
+          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動：局部指定＋自動補排</span></h3>
+          <div class="grid"></div>
+        `;
+
+        const grid = wrap.querySelector(".grid");
+
+        EMPLOYEES.forEach(name => {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.innerHTML = `
+            <span>${name}</span>
+            <select class="role-select" data-name="${name}">
+              <option value="">（交給系統自動）</option>
+              <option value="休假">休假</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          `;
+          grid.appendChild(cell);
+        });
+
+        // 預填（你仍可改）
+        const zaiqing = wrap.querySelector(`select[data-name="在慶"]`);
+        if (zaiqing) zaiqing.value = "C";
+        const yizhong = wrap.querySelector(`select[data-name="奕忠"]`);
+        if (yizhong) yizhong.value = "E";
+
+        content.appendChild(wrap);
+      });
+
+      panel.style.display = "block";
+    }
+
+    async function generateFinalSchedule() {
+      const container = document.getElementById("days-container");
+      const blocks = container.querySelectorAll(".day-block");
+      if (!blocks.length) {
+        alert("請先建立日期列表。");
+        return;
+      }
+
+      // days payload
       const payloadDays = [];
       blocks.forEach(block => {
         const dateStr = block.dataset.date;
@@ -355,145 +447,7 @@
         });
       });
 
-      const resp = await fetch("/api/schedule_range", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: payloadDays })
-      });
-
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        alert(`錯誤：${data.error || "未知錯誤"}`);
-        return;
-      }
-
-      const schedule = data.schedule || [];
-      window.lastAutoSchedule = schedule;
-      window.lastFinalSchedule = null;
-
-      window.lastStartDate = document.getElementById("start-date").value;
-      window.lastEndDate = document.getElementById("end-date").value;
-
-      // 顯示第一階段結果（暫時）
-      renderResult(schedule, true);
-
-      // 生成手動區
-      buildManualPanel(schedule);
-
-      // 如果沒有任何手動日，直接把第一階段當最終
-      const hasManual = schedule.some(d => !!d.manual && !d.no_burn);
-      if (!hasManual) {
-        window.lastFinalSchedule = schedule;
-        document.getElementById("merge-btn").disabled = true;
-        document.getElementById("export-btn").disabled = schedule.length === 0;
-        renderStats(schedule);
-      } else {
-        document.getElementById("merge-btn").disabled = false;
-        document.getElementById("export-btn").disabled = true; // 要等整合後
-        document.getElementById("stats-panel").style.display = "none";
-      }
-    }
-
-    function renderResult(schedule, isStage1) {
-      const panel = document.getElementById("result-panel");
-      const content = document.getElementById("result-content");
-
-      let html = "";
-      schedule.forEach(day => {
-        const dateLabel = day.date ? `｜${day.date}` : "";
-        let tag = "";
-        if (day.no_burn) tag = "（停爐）";
-        else if (day.manual) tag = "（手動待排）";
-
-        html += `<div class="result-day">`;
-        html += `<h3>Day ${day.day_index}${dateLabel}${tag}</h3>`;
-        html += `<pre>`;
-
-        const entries = Object.entries(day.assignment || {});
-        if (!entries.length) {
-          html += `（無排班）\n`;
-        } else {
-          for (const [name, pos] of entries) {
-            html += `${name}：${pos}\n`;
-          }
-        }
-
-        if (isStage1 && !day.manual && !day.no_burn) {
-          const vac = (day.vacations || []);
-          if (vac.length) {
-            html += `\n休假：${vac.join("、")}\n`;
-          } else {
-            html += `\n休假：無\n`;
-          }
-        }
-
-        html += `</pre>`;
-        html += `</div>`;
-      });
-
-      panel.style.display = "block";
-      content.innerHTML = html;
-    }
-
-    function buildManualPanel(schedule) {
-      const panel = document.getElementById("manual-panel");
-      const content = document.getElementById("manual-content");
-      content.innerHTML = "";
-
-      const manualDays = schedule.filter(d => !!d.manual && !d.no_burn);
-      if (!manualDays.length) {
-        panel.style.display = "none";
-        return;
-      }
-
-      manualDays.forEach(day => {
-        const wrap = document.createElement("div");
-        wrap.className = "manual-day";
-        wrap.dataset.date = day.date;
-
-        wrap.innerHTML = `
-          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動（留空=休假）</span></h3>
-          <div class="grid"></div>
-        `;
-
-        const grid = wrap.querySelector(".grid");
-
-        EMPLOYEES.forEach(name => {
-          const cell = document.createElement("div");
-          cell.className = "cell";
-          cell.innerHTML = `
-            <span>${name}</span>
-            <select class="role-select" data-name="${name}">
-              <option value="">（留空=休假）</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-            </select>
-          `;
-          grid.appendChild(cell);
-        });
-
-        // 小保護：在慶/奕忠預填（你也可以改掉）
-        const zaiqing = wrap.querySelector(`select[data-name="在慶"]`);
-        if (zaiqing) zaiqing.value = "C";
-        const yizhong = wrap.querySelector(`select[data-name="奕忠"]`);
-        if (yizhong) yizhong.value = "E";
-
-        content.appendChild(wrap);
-      });
-
-      panel.style.display = "block";
-    }
-
-    async function mergeManual() {
-      if (!window.lastAutoSchedule || !window.lastAutoSchedule.length) {
-        alert("請先完成第一階段自動排班。");
-        return;
-      }
-
-      // 收集手動填寫
+      // manual_assignments payload (只收手動日)
       const manualAssignments = [];
       document.querySelectorAll(".manual-day").forEach(dayBlock => {
         const date = dayBlock.dataset.date;
@@ -501,17 +455,17 @@
 
         dayBlock.querySelectorAll(".role-select").forEach(sel => {
           const name = sel.dataset.name;
-          assignment[name] = sel.value; // 空字串 = 休假
+          assignment[name] = sel.value; // ""=自動, "休假"=休假, A-E=指定
         });
 
         manualAssignments.push({ date, assignment });
       });
 
-      const resp = await fetch("/api/merge_manual", {
+      const resp = await fetch("/api/generate_final", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          auto_schedule: window.lastAutoSchedule,
+          days: payloadDays,
           manual_assignments: manualAssignments
         })
       });
@@ -522,16 +476,56 @@
         return;
       }
 
-      const finalSchedule = data.schedule || [];
-      window.lastFinalSchedule = finalSchedule;
+      const schedule = data.schedule || [];
+      window.lastFinalSchedule = schedule;
 
-      // 顯示最終結果
-      renderResult(finalSchedule, false);
+      window.lastStartDate = document.getElementById("start-date").value;
+      window.lastEndDate = document.getElementById("end-date").value;
 
-      // 統計（最終）
-      renderStats(finalSchedule);
+      renderResult(schedule);
+      renderStats(schedule);
 
-      document.getElementById("export-btn").disabled = finalSchedule.length === 0;
+      document.getElementById("export-btn").disabled = schedule.length === 0;
+    }
+
+    function renderResult(schedule) {
+      const panel = document.getElementById("result-panel");
+      const content = document.getElementById("result-content");
+
+      let html = "";
+      schedule.forEach(day => {
+        const dateLabel = day.date ? `｜${day.date}` : "";
+        let tag = "";
+        if (day.no_burn) tag = "（停爐）";
+        else if (day.manual) tag = "（手動含補排）";
+
+        html += `<div class="result-day">`;
+        html += `<h3>Day ${day.day_index}${dateLabel}${tag}</h3>`;
+        html += `<pre>`;
+
+        const entries = Object.entries(day.assignment || {});
+        if (!entries.length) {
+          html += `（無排班）\n`;
+        } else {
+          // 排序顯示
+          entries.sort((a,b)=>a[0].localeCompare(b[0],"zh-Hant"));
+          for (const [name, pos] of entries) {
+            html += `${name}：${pos}\n`;
+          }
+        }
+
+        const vac = (day.vacations || []);
+        if (!day.no_burn) {
+          if (vac.length) html += `\n休假：${vac.join("、")}\n`;
+          else html += `\n休假：無\n`;
+        }
+
+        html += `</pre>`;
+        html += `</div>`;
+      });
+
+      panel.style.display = "block";
+      content.innerHTML = html;
     }
 
     function renderStats(schedule) {
@@ -603,7 +597,7 @@
     async function exportExcel() {
       const schedule = window.lastFinalSchedule;
       if (!schedule || !schedule.length) {
-        alert("請先完成整合（第二階段），再下載 Excel。");
+        alert("請先產生最終班表，再下載 Excel。");
         return;
       }
 
