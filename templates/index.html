@@ -160,9 +160,9 @@
     <div class="field-row">
       <small class="hint">
         流程：先選日期 → 建立日期列表 →（每一天可勾：停爐 / 手動 / 勾休假）→
-        點「下一步：進入手動填寫」（只針對你勾了手動的日子）→
-        手動日：你用下拉指定「部分人/部分崗位」，沒選的 = 交給系統自動補排；可用「休假」讓某人當天不上班 →
-        最後按「產生最終班表」（一次性產出完整排班）→ 匯出 Excel。
+        點「下一步：進入手動填寫」（只針對勾了手動的日子）→
+        手動日：下拉指定「部分人/部分崗位」，沒選的＝交給系統自動補排，可用「休假」讓某人不上班 →
+        最後按「產生最終班表」→ 匯出 Excel。
       </small>
     </div>
 
@@ -184,9 +184,9 @@
       <h2>手動日填寫區（局部指定＋自動補排）</h2>
       <div class="hint">
         下拉選單說明：<br>
-        ・「（交給系統自動）」= 這個人當天交給系統安排崗位<br>
-        ・「休假」= 這個人當天不上班<br>
-        ・A/B/C/D/E = 你指定此人崗位（系統會尊重並補齊其餘人員）
+        ・「（交給系統自動）」= 此人當天交給系統安排崗位<br>
+        ・「休假」= 此人當天不上班<br>
+        ・A / B / C / D / E = 指定此人崗位（系統尊重並補齊其餘人員）
       </div>
       <div id="manual-content"></div>
     </div>
@@ -204,9 +204,10 @@
 
   <script>
     const EMPLOYEES = {{ employees | tojson | safe }};
+    const FIXED_ROLES = {{ fixed_roles | tojson | safe }};
+    const RESTRICTED_ROLES = {{ restricted_roles | tojson | safe }};
     const weekdayMap = ["日","一","二","三","四","五","六"];
 
-    // 最終結果（整合後）
     window.lastFinalSchedule = null;
     window.lastStartDate = "";
     window.lastEndDate = "";
@@ -226,11 +227,9 @@
       document.getElementById("result-panel").style.display = "none";
       document.getElementById("stats-panel").style.display = "none";
       document.getElementById("manual-panel").style.display = "none";
-
       document.getElementById("export-btn").disabled = true;
       document.getElementById("generate-final-btn").disabled = true;
       document.getElementById("enter-manual-btn").disabled = true;
-
       window.lastFinalSchedule = null;
 
       if (!start || !end) {
@@ -290,7 +289,6 @@
         block.appendChild(empList);
         container.appendChild(block);
 
-        // 互斥/禁用規則
         const manualToggle = block.querySelector(".manual-toggle");
         const noBurnToggle = block.querySelector(".no-burn-toggle");
         const vacChecks = block.querySelectorAll(".vac-checkbox");
@@ -299,7 +297,6 @@
           const manual = manualToggle.checked;
           const noBurn = noBurnToggle.checked;
 
-          // 停爐時：不能手動/不能勾休假
           if (noBurn) {
             manualToggle.checked = false;
             manualToggle.disabled = true;
@@ -309,7 +306,6 @@
             manualToggle.disabled = false;
           }
 
-          // 手動時：休假勾選不使用（禁用）
           if (manual) {
             vacChecks.forEach(cb => { cb.checked = false; cb.disabled = true; });
           } else {
@@ -319,7 +315,6 @@
 
         manualToggle.addEventListener("change", () => {
           refreshDisableState();
-          // 手動狀態變更後，手動面板需要重建（避免日期不同步）
           document.getElementById("manual-panel").style.display = "none";
           document.getElementById("generate-final-btn").disabled = true;
         });
@@ -336,7 +331,6 @@
         index++;
       }
 
-      // 有日期就可以下一步
       document.getElementById("enter-manual-btn").disabled = index <= 1;
     }
 
@@ -348,7 +342,6 @@
         return;
       }
 
-      // 建立手動面板（只針對勾手動、且非停爐）
       const manualDays = [];
       blocks.forEach((block, i) => {
         const dateStr = block.dataset.date;
@@ -360,8 +353,6 @@
       });
 
       buildManualPanel(manualDays);
-
-      // 無論有沒有手動日，都可以產生最終（沒有手動就直接全自動）
       document.getElementById("generate-final-btn").disabled = false;
     }
 
@@ -381,7 +372,7 @@
         wrap.dataset.date = day.date;
 
         wrap.innerHTML = `
-          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動：局部指定＋自動補排</span></h3>
+          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動：完全由你指定</span></h3>
           <div class="grid"></div>
         `;
 
@@ -390,26 +381,30 @@
         EMPLOYEES.forEach(name => {
           const cell = document.createElement("div");
           cell.className = "cell";
+
+          // 受限員工只顯示允許的角色，其餘顯示全部
+          const allowed = RESTRICTED_ROLES[name] || ["A", "B", "C", "D", "E"];
+
+          let optionsHtml = `<option value="">（交給系統自動）</option>`;
+          optionsHtml += `<option value="休假">休假</option>`;
+          allowed.forEach(r => {
+            optionsHtml += `<option value="${r}">${r}</option>`;
+          });
+
           cell.innerHTML = `
             <span>${name}</span>
             <select class="role-select" data-name="${name}">
-              <option value="">（交給系統自動）</option>
-              <option value="休假">休假</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
+              ${optionsHtml}
             </select>
           `;
           grid.appendChild(cell);
-        });
 
-        // 預填（你仍可改）
-        const zaiqing = wrap.querySelector(`select[data-name="在慶"]`);
-        if (zaiqing) zaiqing.value = "C";
-        const yizhong = wrap.querySelector(`select[data-name="奕忠"]`);
-        if (yizhong) yizhong.value = "E";
+          // 預填固定角色
+          const fixedRole = FIXED_ROLES[name];
+          if (fixedRole) {
+            cell.querySelector("select").value = fixedRole;
+          }
+        });
 
         content.appendChild(wrap);
       });
@@ -425,49 +420,67 @@
         return;
       }
 
-      // days payload
-      const payloadDays = [];
-      blocks.forEach(block => {
-        const dateStr = block.dataset.date;
-        const manual = block.querySelector(".manual-toggle").checked;
-        const noBurn = block.querySelector(".no-burn-toggle").checked;
-
-        const vacations = [];
-        if (!manual && !noBurn) {
-          block.querySelectorAll(".vac-checkbox").forEach(cb => {
-            if (cb.checked) vacations.push(cb.value);
-          });
-        }
-
-        payloadDays.push({
-          date: dateStr,
-          manual: manual,
-          no_burn: noBurn,
-          vacations: vacations
-        });
-      });
-
-      // manual_assignments payload (只收手動日)
-      const manualAssignments = [];
+      // 收集手動日的 manual_assignment（以 date 為 key）
+      const manualMap = {};
       document.querySelectorAll(".manual-day").forEach(dayBlock => {
         const date = dayBlock.dataset.date;
         const assignment = {};
-
         dayBlock.querySelectorAll(".role-select").forEach(sel => {
           const name = sel.dataset.name;
-          assignment[name] = sel.value; // ""=自動, "休假"=休假, A-E=指定
+          const role = sel.value;
+          if (role) assignment[name] = role; // 空字串("不排") 不送出
         });
+        manualMap[date] = assignment;
+      });
 
-        manualAssignments.push({ date, assignment });
+      const payloadDays = [];
+      blocks.forEach(block => {
+        const dateStr = block.dataset.date;
+        const isManual = block.querySelector(".manual-toggle").checked;
+        const isNoBurn = block.querySelector(".no-burn-toggle").checked;
+
+        if (isNoBurn) {
+          payloadDays.push({
+            date: dateStr,
+            employees_mode: "OFF",
+            mode: "AUTO",
+            employees: [],
+            manual_assignment: null
+          });
+          return;
+        }
+
+        if (isManual) {
+          payloadDays.push({
+            date: dateStr,
+            employees_mode: "WORK",
+            mode: "MANUAL",
+            employees: [],
+            manual_assignment: manualMap[dateStr] || {}
+          });
+          return;
+        }
+
+        // AUTO：收集休假 → 計算上班名單
+        const vacations = [];
+        block.querySelectorAll(".vac-checkbox").forEach(cb => {
+          if (cb.checked) vacations.push(cb.value);
+        });
+        const employees = EMPLOYEES.filter(e => !vacations.includes(e));
+
+        payloadDays.push({
+          date: dateStr,
+          employees_mode: "WORK",
+          mode: "AUTO",
+          employees: employees,
+          manual_assignment: null
+        });
       });
 
       const resp = await fetch("/api/generate_final", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          days: payloadDays,
-          manual_assignments: manualAssignments
-        })
+        body: JSON.stringify({ days: payloadDays })
       });
 
       const data = await resp.json();
@@ -478,7 +491,6 @@
 
       const schedule = data.schedule || [];
       window.lastFinalSchedule = schedule;
-
       window.lastStartDate = document.getElementById("start-date").value;
       window.lastEndDate = document.getElementById("end-date").value;
 
@@ -495,9 +507,12 @@
       let html = "";
       schedule.forEach(day => {
         const dateLabel = day.date ? `｜${day.date}` : "";
+        const isOff = day.employees_mode === "OFF";
+        const isManual = day.mode === "MANUAL";
+
         let tag = "";
-        if (day.no_burn) tag = "（停爐）";
-        else if (day.manual) tag = "（手動含補排）";
+        if (isOff) tag = "（停爐）";
+        else if (isManual) tag = "（手動）";
 
         html += `<div class="result-day">`;
         html += `<h3>Day ${day.day_index}${dateLabel}${tag}</h3>`;
@@ -507,17 +522,16 @@
         if (!entries.length) {
           html += `（無排班）\n`;
         } else {
-          // 排序顯示
-          entries.sort((a,b)=>a[0].localeCompare(b[0],"zh-Hant"));
-          for (const [name, pos] of entries) {
-            html += `${name}：${pos}\n`;
+          // 依 EMPLOYEES 順序排列
+          const ordered = EMPLOYEES.filter(n => day.assignment[n]);
+          for (const name of ordered) {
+            html += `${name}：${day.assignment[name]}\n`;
           }
         }
 
-        const vac = (day.vacations || []);
-        if (!day.no_burn) {
-          if (vac.length) html += `\n休假：${vac.join("、")}\n`;
-          else html += `\n休假：無\n`;
+        if (!isOff) {
+          const vac = day.vacations || [];
+          html += vac.length ? `\n休假：${vac.join("、")}\n` : `\n休假：無\n`;
         }
 
         html += `</pre>`;
@@ -545,10 +559,10 @@
 
       schedule.forEach(day => {
         const dateStr = day.date;
-        let weekday = null; // 0=日,1=一,...6=六
+        let weekday = null;
         if (dateStr) {
           const d = new Date(dateStr + "T00:00:00");
-          if (!isNaN(d.getTime())) weekday = d.getDay();
+          if (!isNaN(d.getTime())) weekday = d.getDay(); // 0=日,1=一,...
         }
 
         for (const [name, role] of Object.entries(day.assignment || {})) {
@@ -558,18 +572,17 @@
           stats[name].total += 1;
           stats[name][role] += 1;
 
-          // JS Monday=1
-          if (weekday === 1 && role === "C" && name !== "在慶" && name !== "奕忠") {
+          // 固定C員工本來就一定排C，週一C統計不具意義，排除
+          const isFixedC = FIXED_ROLES[name] === "C";
+          if (weekday === 1 && role === "C" && !isFixedC) {
             stats[name].monC += 1;
           }
         }
       });
 
-      const names = Object.keys(stats).sort((a,b)=>a.localeCompare(b,"zh-Hant"));
-
+      const names = EMPLOYEES.slice(); // 依原始順序
       let html = "<table><thead><tr>";
-      html += "<th>人員</th>";
-      html += "<th>總班數</th>";
+      html += "<th>人員</th><th>總班數</th>";
       html += "<th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>";
       html += "<th>週一 C</th>";
       html += "</tr></thead><tbody>";
@@ -579,17 +592,12 @@
         html += "<tr>";
         html += `<td>${name}</td>`;
         html += `<td>${s.total}</td>`;
-        html += `<td>${s.A}</td>`;
-        html += `<td>${s.B}</td>`;
-        html += `<td>${s.C}</td>`;
-        html += `<td>${s.D}</td>`;
-        html += `<td>${s.E}</td>`;
+        html += `<td>${s.A}</td><td>${s.B}</td><td>${s.C}</td><td>${s.D}</td><td>${s.E}</td>`;
         html += `<td>${s.monC}</td>`;
         html += "</tr>";
       });
 
       html += "</tbody></table>";
-
       content.innerHTML = html;
       panel.style.display = "block";
     }
