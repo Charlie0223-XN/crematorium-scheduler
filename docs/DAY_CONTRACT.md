@@ -1,163 +1,122 @@
-Day 母版資料契約 v1（定稿）
+# 四週排班資料契約 v2
 
-本文件為排班系統的唯一資料契約（Single Source of Truth）。
-任何前端、後端、排班邏輯的修改，不得違反本文件定義之語意與行為。
+本文件是新廠排班系統的資料與行為基準。v2 已完全取代舊版 AUTO／MANUAL／OFF 契約。
 
-一、設計目標
+## 1. 固定範圍
 
-本輪修改不是為了提升排班演算法品質，
-而是為了：
+- 每次排班固定為連續 28 天。
+- 員工固定為 `employees.json` 中的 13 人，順序同該檔案。
+- 每人至少選擇 8 天個人休假；可選 9、10 天以上，不設固定上限。
+- 停爐日不是個人休假，不計入個人休假天數。
+- 休假、停爐、其他日未排都會中斷連續 B。
 
-穩定「使用者意圖 → 系統行為」的對應關係
+## 2. 請求格式
 
-消除前端 / 後端 / 排班邏輯之間的語意誤解
-
-明確區分 AUTO / MANUAL / OFF 三種狀態
-
-防止系統自行推測、補齊、或更改使用者意圖
-
-二、Day 母版資料結構（唯一合法格式）
-
-每一天最終都必須能被正規化為以下結構：
-
-Day {
-  date: string               // YYYY-MM-DD，必填
-  weekday: number             // 0~6，Monday=0（可由後端補齊）
-  employees_mode: "WORK" | "OFF"
-  mode: "AUTO" | "MANUAL"
-  employees: string[]
-  manual_assignment: { [name]: "A"|"B"|"C"|"D"|"E" } | null
-}
-
-預設值規則
-
-缺 employees_mode → 視為 "WORK"
-
-缺 mode → 視為 "AUTO"
-
-缺 employees → 視為 []
-
-缺 manual_assignment → 視為 null
-
-缺 weekday → 由後端依 date 計算補齊
-
-三、Day 的三種狀態（語意定義）
-1️⃣ AUTO（自動排班）
-
-系統依既有 scheduler.py 自動排班
-
-使用 ABCCD、疲勞模型、固定 C / 固定 E 等既有邏輯
-
-使用者不指定角色
-
-僅在 employees_mode="WORK" 時有意義
-
-2️⃣ MANUAL（手動排班）
-
-使用者自行指定 A/B/C/D/E
-
-系統 不介入、不補、不平均、不修正
-
-不套用任何自動規則（大日、週一、疲勞模型等）
-
-僅作「顯示與統計」
-
-MANUAL 日的正式定義（定稿）：
-
-當天實際上班人員 = manual_assignment 中出現的人
-未被指定的人，視為不在該日排班世界中
-
-3️⃣ OFF（停爐日）
-
-當天不燒、不排主班
-
-employees 允許為空陣列
-
-系統仍需正常產出（assignment = {}）
-
-不得因空資料而報錯
-
-四、行為真相表（不可推翻）
-
-系統只能依以下規則行為，不得自行推論：
-
-employees_mode	mode	語意	系統行為	是否進 scheduler
-OFF	AUTO	停爐日	直接產出空 assignment	否
-OFF	MANUAL	停爐日	直接產出空 assignment	否
-WORK	AUTO	自動排班	交由 scheduler 排班	是
-WORK	MANUAL	手動排班	完全照 manual_assignment	否
-關鍵鎖定規則
-
-employees_mode="OFF" 的優先級 最高
-
-mode="MANUAL" 時 絕對不進 scheduler
-
-mode="AUTO" 時 必須忽略 manual_assignment
-
-五、被正式取消的概念（本輪不再存在）
-
-以下概念不得再出現在自動流程中：
-
-❌ 大日 / 特殊日 / 週一特殊邏輯
-
-❌ 大日 A/D 自動平均
-
-❌ 任何「半手動」「混合模式」
-
-❌ 需要使用者理解排班內部規則的中間概念
-
-所有「特殊情況」一律使用 MANUAL 表達。
-
-六、責任切割（實作共識）
-前端（index.html）
-
-僅負責讓使用者選擇：
-
-AUTO / MANUAL / OFF
--（MANUAL 時）角色指派
-
-不解釋、不推論排班後果
-
-後端（app.py）
-
-將輸入正規化為 Day 母版
-
-依行為真相表做唯一分流
-
-嚴禁猜測使用者意圖
-
-排班引擎（scheduler.py）
-
-僅處理 WORK + AUTO
-
-不需理解 MANUAL / OFF
-
-七、範例（MANUAL 日）
-
-1/3 號
-六個人上班
-
-甲 A、乙 B、丙 C、丁 C、戊 D、己 E
-其他未指定者不列入排班
-
-對應 Day：
-
+```json
 {
-  "date": "2026-01-03",
-  "weekday": 5,
-  "employees_mode": "WORK",
-  "mode": "MANUAL",
-  "employees": [],
-  "manual_assignment": {
-    "甲": "A",
-    "乙": "B",
-    "丙": "C",
-    "丁": "C",
-    "戊": "D",
-    "己": "E"
+  "seed": 123456,
+  "days": [
+    {
+      "date": "2026-09-01",
+      "day_type": "NORMAL",
+      "label": "",
+      "requirements": {}
+    },
+    {
+      "date": "2026-09-02",
+      "day_type": "CUSTOM",
+      "label": "停爐留守",
+      "requirements": {"A": 0, "B": 2, "C": 0}
+    }
+  ],
+  "vacations": {
+    "豐杰": ["2026-09-03", "2026-09-04"],
+    "孟桓": ["2026-09-05"]
   }
 }
+```
 
+正式請求必須有 28 個連續日期，且 `vacations` 必須包含全部 13 人。
 
-本文件為 v1 定稿。
-後續擴充需以「新增欄位或新版本」進行，不得破壞既有語意。
+## 3. 日期類型
+
+| `day_type` | 中文 | 角色需求 | 排班行為 |
+|---|---|---|---|
+| `NORMAL` | 一般日 | 2A、2C、其餘 B | 所有非休假人員均排崗位 |
+| `BIG` | 大日 | 2A、2C、其餘 B | 同一般日，但更強力避免連續 B |
+| `OFF` | 停爐 | 0 | 不排任何人，重置所有人的連 B |
+| `CUSTOM` | 其他 | 使用 `requirements` | 精確排指定人數，其餘可上班人員為「未排」 |
+
+`CUSTOM` 可用於停爐留守等情況。例如 `{A: 0, B: 2, C: 0}` 代表由系統公平挑選兩名 B 留守。
+
+## 4. 人員與角色
+
+- 僅存在 A、B、C 三種角色；D、E 已取消。
+- 沒有任何固定角色。
+- 天立、在慶只能排 B 或 C，不得排 A。
+- 天立、在慶的角色偏好為 B 大於 C；這是排班權重，不是禁止 C。
+- 其他人員可排 A、B、C。
+
+## 5. 排班權重
+
+硬限制永遠優先於分數：
+
+1. 人員不可在休假日被排班。
+2. 人員不可被排到不允許的角色。
+3. 每日角色數必須符合該日需求。
+
+符合硬限制的候選中，依下列方向挑選：
+
+1. 按每人實際可排天數，平均各角色分配比例。
+2. 前一天為 B 時，隔天優先 A、其次 C，盡量避免再次 B。
+3. 大日放大前項權重；若人數與需求無法避開，仍允許連續 B。
+4. 自訂日只需要少數人員時，同時平衡誰被選為留守。
+5. 天立、在慶在 B／C 之間增加 B 偏好。
+6. `seed` 只改變分數接近的候選，用於「重新安排一次」，不得破壞硬限制。
+
+每次產生完整四週班表時，公平性統計從零開始，不延續上一期。
+
+## 6. 回應格式
+
+```json
+{
+  "seed": 123456,
+  "schedule": [
+    {
+      "day_index": 1,
+      "date": "2026-09-01",
+      "weekday": 1,
+      "day_type": "NORMAL",
+      "label": "",
+      "requirements": {"A": 2, "B": 9, "C": 2},
+      "assignment": {"豐杰": "A"},
+      "vacations": [],
+      "unassigned": []
+    }
+  ],
+  "stats": {}
+}
+```
+
+`assignment` 只包含當日實際排到崗位的人；個人休假列於 `vacations`；自訂日可上班但未被需求選中的人列於 `unassigned`。
+
+## 7. 統計定義
+
+- `vacation_days`：非停爐日的個人休假天數。
+- `available_days`：非停爐且非個人休假的天數。
+- `assigned_days`：實際被排 A／B／C 的天數。
+- `unassigned_days`：可上班但在自訂日未被排到的天數。
+- `consecutive_b_occurrences`：每次 `B → B` 算一次；三天連 B 算兩次。
+- `longest_b_streak`：期間內最長連續 B 天數。
+- `ending_b_streak`：期間最後一天結束時仍持續的連 B 天數。
+- `balance.overall_score`：按可排天數與允許角色比較 A／B／C 分配率的整體分數，滿分 100。
+
+## 8. Excel
+
+Excel 必須由同一份日期模板、休假資料與 `seed` 重新生成，包含：
+
+1. 每日班表
+2. 人員統計
+3. 休假設定
+
+不得匯出已被前端後續修改淘汰的舊結果。

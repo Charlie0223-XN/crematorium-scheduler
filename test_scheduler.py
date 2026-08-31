@@ -1,124 +1,188 @@
-# test_scheduler.py
-"""
-排班核心邏輯的基本單元測試。
-執行：python test_scheduler.py
-"""
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
+"""排班核心 v2 單元測試。執行：python -m unittest -v test_scheduler.py"""
+from __future__ import annotations
+
+import unittest
+from collections import Counter
+from datetime import date, timedelta
 
 from scheduler import (
-    EMPLOYEES, FIXED_ROLES, RESTRICTED_ROLES, ROLES,
-    generate_period, generate_day,
+    EMPLOYEES,
+    EMPLOYEE_ROWS,
+    RESTRICTED_ROLES,
+    ROLES,
+    ScheduleError,
+    calculate_stats,
+    generate_period,
 )
 
 
-def assert_eq(desc, actual, expected):
-    if actual != expected:
-        print(f"  FAIL  {desc}")
-        print(f"        expected: {expected}")
-        print(f"        actual:   {actual}")
-        return False
-    print(f"  PASS  {desc}")
-    return True
+START = date(2026, 9, 1)
 
 
-def assert_true(desc, condition):
-    if not condition:
-        print(f"  FAIL  {desc}")
-        return False
-    print(f"  PASS  {desc}")
-    return True
+def make_days(overrides=None):
+    overrides = overrides or {}
+    days = []
+    for index in range(28):
+        item = {
+            "date": (START + timedelta(days=index)).isoformat(),
+            "day_type": "NORMAL",
+            "label": "",
+            "requirements": {},
+        }
+        item.update(overrides.get(index, {}))
+        days.append(item)
+    return days
 
 
-passed = failed = 0
+def staggered_vacations(off_indexes=()):
+    off_indexes = set(off_indexes)
+    vacations = {}
+    for employee_index, name in enumerate(EMPLOYEES):
+        indexes = []
+        candidate_index = employee_index
+        while len(indexes) < 8:
+            index = candidate_index % 28
+            if index not in off_indexes and index not in indexes:
+                indexes.append(index)
+            candidate_index += 13
+        vacations[name] = [
+            (START + timedelta(days=index)).isoformat() for index in sorted(indexes)
+        ]
+    return vacations
 
-def run(desc, condition):
-    global passed, failed
-    if assert_true(desc, condition):
-        passed += 1
-    else:
-        failed += 1
+
+class SchedulerV2Tests(unittest.TestCase):
+    def test_employee_configuration_and_order(self):
+        self.assertEqual(len(EMPLOYEES), 13)
+        self.assertEqual(
+            EMPLOYEE_ROWS[0],
+            ["豐杰", "孟桓", "立群", "學林", "天立", "井仁", "崇誠"],
+        )
+        self.assertEqual(
+            EMPLOYEE_ROWS[1],
+            ["在慶", "奕忠", "紀龍", "子紘", "俊瑋", "呈哲"],
+        )
+        self.assertEqual(ROLES, ("A", "B", "C"))
+        self.assertEqual(RESTRICTED_ROLES["天立"], ["B", "C"])
+        self.assertEqual(RESTRICTED_ROLES["在慶"], ["B", "C"])
+
+    def test_normal_day_is_two_a_two_c_and_rest_b(self):
+        day = make_days()[:1]
+        vacations = {name: [] for name in EMPLOYEES}
+        result = generate_period(day, vacations, seed=100)
+        counts = Counter(result["schedule"][0]["assignment"].values())
+        self.assertEqual(counts, {"A": 2, "B": 9, "C": 2})
+
+    def test_28_days_respect_vacations_and_daily_requirements(self):
+        days = make_days({5: {"day_type": "BIG"}, 12: {"day_type": "BIG"}})
+        vacations = staggered_vacations()
+        result = generate_period(days, vacations, seed=20260831)
+
+        self.assertEqual(len(result["schedule"]), 28)
+        for day in result["schedule"]:
+            assignment = day["assignment"]
+            self.assertFalse(set(assignment) & set(day["vacations"]))
+            counts = Counter(assignment.values())
+            self.assertEqual(counts["A"], 2)
+            self.assertEqual(counts["C"], 2)
+            self.assertEqual(counts["B"], len(assignment) - 4)
+
+    def test_restricted_employees_never_receive_a(self):
+        result = generate_period(
+            make_days(),
+            {name: [] for name in EMPLOYEES},
+            seed=77,
+        )
+        for day in result["schedule"]:
+            self.assertNotEqual(day["assignment"].get("天立"), "A")
+            self.assertNotEqual(day["assignment"].get("在慶"), "A")
+
+    def test_restricted_employees_prefer_b_over_c(self):
+        result = generate_period(
+            make_days(),
+            {name: [] for name in EMPLOYEES},
+            seed=99,
+        )
+        stats = {item["name"]: item for item in result["stats"]["employees"]}
+        for name in ("天立", "在慶"):
+            self.assertGreater(stats[name]["role_counts"]["B"], stats[name]["role_counts"]["C"])
+
+    def test_custom_day_uses_exact_counts_and_leaves_others_unassigned(self):
+        days = make_days({
+            0: {
+                "day_type": "CUSTOM",
+                "label": "停爐留守",
+                "requirements": {"A": 0, "B": 2, "C": 0},
+            }
+        })[:1]
+        result = generate_period(days, {name: [] for name in EMPLOYEES}, seed=5)
+        custom_day = result["schedule"][0]
+        self.assertEqual(Counter(custom_day["assignment"].values()), {"B": 2})
+        self.assertEqual(len(custom_day["unassigned"]), 11)
+
+    def test_impossible_custom_role_requirement_is_rejected(self):
+        days = [{
+            "date": START.isoformat(),
+            "day_type": "CUSTOM",
+            "label": "限制測試",
+            "requirements": {"A": 1, "B": 0, "C": 0},
+        }]
+        vacations = {
+            name: ([] if name in ("天立", "在慶") else [START.isoformat()])
+            for name in EMPLOYEES
+        }
+        with self.assertRaises(ScheduleError):
+            generate_period(days, vacations, seed=1)
+
+    def test_off_day_has_no_assignment_and_no_vacations(self):
+        days = make_days({0: {"day_type": "OFF"}})[:1]
+        vacations = {name: [START.isoformat()] for name in EMPLOYEES}
+        result = generate_period(days, vacations, seed=1)
+        self.assertEqual(result["schedule"][0]["assignment"], {})
+        self.assertEqual(result["schedule"][0]["vacations"], [])
+
+    def test_same_seed_repeats_and_new_seed_can_reroll(self):
+        days = make_days()
+        vacations = staggered_vacations()
+        first = generate_period(days, vacations, seed=123)["schedule"]
+        repeated = generate_period(days, vacations, seed=123)["schedule"]
+        rerolled = generate_period(days, vacations, seed=456)["schedule"]
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(
+            [day["assignment"] for day in first],
+            [day["assignment"] for day in rerolled],
+        )
+
+    def test_vacation_breaks_consecutive_b(self):
+        target = "子紘"
+        schedule = [
+            {"date": "2026-09-01", "day_type": "NORMAL", "assignment": {target: "B"}},
+            {"date": "2026-09-02", "day_type": "NORMAL", "assignment": {}},
+            {"date": "2026-09-03", "day_type": "NORMAL", "assignment": {target: "B"}},
+            {"date": "2026-09-04", "day_type": "NORMAL", "assignment": {target: "B"}},
+        ]
+        vacations = {name: [] for name in EMPLOYEES}
+        vacations[target] = ["2026-09-02"]
+        stats = calculate_stats(schedule, vacations)
+        target_stats = next(item for item in stats["employees"] if item["name"] == target)
+        self.assertEqual(target_stats["consecutive_b_occurrences"], 1)
+        self.assertEqual(target_stats["longest_b_streak"], 2)
+        self.assertEqual(target_stats["ending_b_streak"], 2)
+
+    def test_off_and_unassigned_also_break_consecutive_b(self):
+        target = "子紘"
+        schedule = [
+            {"date": "2026-09-01", "day_type": "NORMAL", "assignment": {target: "B"}},
+            {"date": "2026-09-02", "day_type": "OFF", "assignment": {}},
+            {"date": "2026-09-03", "day_type": "NORMAL", "assignment": {target: "B"}},
+            {"date": "2026-09-04", "day_type": "CUSTOM", "assignment": {}},
+            {"date": "2026-09-05", "day_type": "NORMAL", "assignment": {target: "B"}},
+        ]
+        stats = calculate_stats(schedule, {name: [] for name in EMPLOYEES})
+        target_stats = next(item for item in stats["employees"] if item["name"] == target)
+        self.assertEqual(target_stats["consecutive_b_occurrences"], 0)
+        self.assertEqual(target_stats["longest_b_streak"], 1)
 
 
-print("=== scheduler tests ===\n")
-
-# ── 1. 固定角色：奕忠永遠 E ──────────────────────────────────
-print("[ 固定角色 ]")
-result, _ = generate_day(EMPLOYEES)
-run("奕忠固定 E", result.get("奕忠") == "E")
-run("井仁固定 C", result.get("井仁") == "C")
-run("俊瑋固定 C", result.get("俊瑋") == "C")
-
-# ── 2. 受限角色：在慶只能 B/C/D ─────────────────────────────
-print("\n[ 受限角色 ]")
-for _ in range(30):
-    r, _ = generate_day(EMPLOYEES)
-    zaiqing_role = r.get("在慶")
-    if zaiqing_role not in ("B", "C", "D"):
-        run(f"在慶限 B/C/D（30次隨機）", False)
-        break
-else:
-    run("在慶限 B/C/D（30次隨機）", True)
-
-# ── 3. 疲勞模型：前天C→今天不能C（一般員工）────────────────────
-# 僅測 5 人，角色池 ABCCD 中只有 2 個 C → 一般員工前天排 C 的人今天拿不到 C
-print("\n[ 疲勞模型 ]")
-from scheduler import _assign_one_day_with_fixed, FIXED_ROLES as FR
-from typing import Dict
-
-# 5 人：選不含固定角色員工的一般員工
-normal_emps = [e for e in EMPLOYEES if e not in FR and e not in RESTRICTED_ROLES][:5]
-prev_all_c = {e: "C" for e in normal_emps}
-day_meta = {"date": "2026-01-01", "weekday": 3, "mode": "AUTO",
-            "employees": normal_emps, "fixed": {}}
-role_counts: Dict = {e: {r: 0 for r in ROLES} for e in EMPLOYEES}
-assignment = _assign_one_day_with_fixed(day_meta, prev_all_c, role_counts)
-
-# 5人時角色池 ABCCD：只有 2 個C，所以最多 2 人能拿 C
-# 驗證：前天排C的一般員工，今天被分到 C 的數量不超過 2
-c_count = sum(1 for e in normal_emps if assignment.get(e) == "C")
-run("前天全C（5人）→ 今天C的數量不超過角色池C上限(2)", c_count <= 2)
-
-# ── 4. OFF 模式：停爐日回傳空 assignment ─────────────────────
-print("\n[ OFF 模式 ]")
-schedule = generate_period([
-    {"date": "2026-01-01", "weekday": 3, "mode": "OFF", "employees": [], "fixed": {}}
-])
-run("停爐日 assignment 為空 dict", schedule[0] == {})
-
-# ── 5. MANUAL 模式：原樣輸出，不進 scheduler ─────────────────
-print("\n[ MANUAL 模式 ]")
-manual_assign = {"豐杰": "A", "在慶": "B", "奕忠": "E"}
-schedule = generate_period([
-    {"date": "2026-01-01", "weekday": 3, "mode": "MANUAL",
-     "employees": list(manual_assign.keys()), "fixed": manual_assign}
-])
-run("手動日 assignment 完全照輸入", schedule[0] == manual_assign)
-
-# ── 6. AUTO 多日：角色池覆蓋所有在場員工 ──────────────────────
-print("\n[ AUTO 多日 ]")
-days_info = [
-    {"date": f"2026-01-{i:02d}", "weekday": i % 7, "mode": "AUTO",
-     "employees": EMPLOYEES, "fixed": {}}
-    for i in range(1, 8)
-]
-schedule = generate_period(days_info)
-all_covered = all(
-    len(day_assign) == len(EMPLOYEES)
-    for day_assign in schedule
-)
-run("全員出勤時每日 assignment 包含所有人", all_covered)
-
-roles_valid = all(
-    v in ROLES
-    for day_assign in schedule
-    for v in day_assign.values()
-)
-run("所有角色值合法（ABCDE）", roles_valid)
-
-# ── 結果 ────────────────────────────────────────────────────
-print(f"\n{'='*30}")
-print(f"結果：{passed} passed，{failed} failed")
-if failed:
-    sys.exit(1)
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

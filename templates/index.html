@@ -2,641 +2,191 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>火葬場排班輔助系統</title>
-  <style>
-    body {
-      font-family: "Microsoft JhengHei", sans-serif;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    h1 { margin-bottom: 10px; }
-    .control-panel, .result-panel {
-      background: #ffffff;
-      padding: 16px;
-      margin-bottom: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.08);
-    }
-    .field-row { margin-bottom: 10px; }
-    label { margin-right: 8px; }
-    .days-container { margin-top: 10px; }
-    .day-block {
-      background: #fafafa;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-    .day-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 6px;
-      font-weight: bold;
-      gap: 10px;
-    }
-    .day-header .right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      font-weight: normal;
-    }
-    .emp-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .emp-item {
-      border: 1px solid #ccc;
-      padding: 3px 6px;
-      border-radius: 4px;
-      background: #fff;
-      font-size: 13px;
-    }
-    button {
-      padding: 6px 12px;
-      border-radius: 4px;
-      border: none;
-      cursor: pointer;
-      background: #1976d2;
-      color: #fff;
-      font-size: 14px;
-      margin-right: 8px;
-    }
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-    .result-day {
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #ddd;
-    }
-    .result-day h3 { margin: 0 0 4px 0; }
-    pre {
-      white-space: pre-wrap;
-      font-size: 13px;
-      background: #f9f9f9;
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid #eee;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: 13px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 4px 6px;
-      text-align: center;
-    }
-    th { background: #f0f0f0; }
-
-    .manual-panel {
-      display: none;
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px dashed #ddd;
-    }
-    .manual-day {
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 10px;
-      margin: 10px 0;
-      background: #fff;
-    }
-    .manual-day h3 { margin: 0 0 8px 0; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .grid .cell {
-      border: 1px solid #eee;
-      border-radius: 6px;
-      padding: 6px;
-      background: #fafafa;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 13px;
-    }
-    select {
-      padding: 3px 6px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      background: #fff;
-    }
-    .hint {
-      font-size: 12px;
-      color: #555;
-    }
-    .tag {
-      display: inline-block;
-      font-size: 12px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: #eee;
-      margin-left: 6px;
-      font-weight: normal;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="新廠四週人員休假與崗位排班工具">
+  <title>新廠四週排班</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>🔥 火葬場排班輔助系統</h1>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
 
-  <div class="control-panel">
-    <div class="field-row">
-      <label for="start-date">起始日期：</label>
-      <input type="date" id="start-date">
-      <label for="end-date" style="margin-left: 12px;">結束日期：</label>
-      <input type="date" id="end-date">
-      <button type="button" onclick="buildDays()">建立日期列表</button>
-    </div>
-
-    <div class="field-row">
-      <small class="hint">
-        流程：先選日期 → 建立日期列表 →（每一天可勾：停爐 / 手動 / 勾休假）→
-        點「下一步：進入手動填寫」（只針對勾了手動的日子）→
-        手動日：下拉指定「部分人/部分崗位」，沒選的＝交給系統自動補排，可用「休假」讓某人不上班 →
-        最後按「產生最終班表」→ 匯出 Excel。
-      </small>
-    </div>
-
-    <div id="days-container" class="days-container"></div>
-
-    <div class="field-row">
-      <button type="button" id="enter-manual-btn" onclick="enterManualStage()" disabled>
-        下一步：進入手動填寫
-      </button>
-      <button type="button" id="generate-final-btn" onclick="generateFinalSchedule()" disabled>
-        產生最終班表（一次完成）
-      </button>
-      <button type="button" id="export-btn" onclick="exportExcel()" disabled>
-        下載 Excel（最終）
-      </button>
-    </div>
-
-    <div id="manual-panel" class="manual-panel">
-      <h2>手動日填寫區（局部指定＋自動補排）</h2>
-      <div class="hint">
-        下拉選單說明：<br>
-        ・「（交給系統自動）」= 此人當天交給系統安排崗位<br>
-        ・「休假」= 此人當天不上班<br>
-        ・A / B / C / D / E = 指定此人崗位（系統尊重並補齊其餘人員）
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">4W</div>
+        <div>
+          <p class="eyebrow">NEW FACILITY · SCHEDULER V2</p>
+          <h1>新廠四週排班</h1>
+          <p class="subtitle">先定義日期，再逐人選休假，最後交給系統平衡 A／B／C。</p>
+        </div>
       </div>
-      <div id="manual-content"></div>
+      <div class="header-facts" aria-label="排班基本資訊">
+        <div><strong>{{ period_days }}</strong><span>天</span></div>
+        <div><strong>{{ employees|length }}</strong><span>人</span></div>
+        <div><strong>3</strong><span>崗位</span></div>
+      </div>
     </div>
-  </div>
+  </header>
 
-  <div id="result-panel" class="result-panel" style="display:none;">
-    <h2>排班結果（最終）</h2>
-    <div id="result-content"></div>
-  </div>
+  <main id="main-content" class="page-shell">
+    <nav class="stepper" aria-label="排班流程">
+      <div class="step-item is-active" data-step-indicator="1">
+        <span class="step-number">01</span>
+        <span><strong>日期模板</strong><small>標記每日狀態</small></span>
+      </div>
+      <div class="step-item" data-step-indicator="2">
+        <span class="step-number">02</span>
+        <span><strong>人員休假</strong><small>每人至少 {{ min_vacation_days }} 天</small></span>
+      </div>
+      <div class="step-item" data-step-indicator="3">
+        <span class="step-number">03</span>
+        <span><strong>產生班表</strong><small>檢查並自動平衡</small></span>
+      </div>
+      <div class="step-item" data-step-indicator="4">
+        <span class="step-number">04</span>
+        <span><strong>統計匯出</strong><small>檢視比例與連 B</small></span>
+      </div>
+    </nav>
 
-  <div id="stats-panel" class="result-panel" style="display:none;">
-    <h2>統計（最終班表：每人 A/B/C/D/E、週一 C 次數）</h2>
-    <div id="stats-content"></div>
-  </div>
+    <section class="panel" id="period-section" aria-labelledby="period-title">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">STEP 01</p>
+          <h2 id="period-title">建立 28 天日期模板</h2>
+          <p>選擇起始日後，系統會自動帶出完整四週。再逐日標記一般日、大日、停爐或其他。</p>
+        </div>
+        <span class="status-pill" id="period-status">尚未建立</span>
+      </div>
+
+      <div class="period-controls">
+        <label class="field">
+          <span>起始日期</span>
+          <input type="date" id="start-date" autocomplete="off">
+        </label>
+        <div class="range-arrow" aria-hidden="true">→</div>
+        <label class="field">
+          <span>結束日期（自動）</span>
+          <input type="date" id="end-date" readonly tabindex="-1">
+        </label>
+        <button class="button button-primary" type="button" id="build-period-btn">建立四週模板</button>
+      </div>
+
+      <div class="legend" aria-label="日期類型說明">
+        <span><i class="legend-dot type-normal"></i>一般日：2A＋2C＋其餘B</span>
+        <span><i class="legend-dot type-big"></i>大日：加強避免連B</span>
+        <span><i class="legend-dot type-off"></i>停爐：全日不排</span>
+        <span><i class="legend-dot type-custom"></i>其他：自訂A／B／C人數</span>
+      </div>
+
+      <div id="days-empty" class="empty-state">
+        <strong>從起始日期開始</strong>
+        <span>建立後，這裡會顯示 4 週 × 7 天的日期模板。</span>
+      </div>
+      <div id="days-grid" class="days-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="panel is-locked" id="vacation-section" aria-labelledby="vacation-title">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">STEP 02</p>
+          <h2 id="vacation-title">依人員選擇休假日</h2>
+          <p>切換人名後直接點日期。停爐日會鎖定，其他未選日期都視為可以排班。</p>
+        </div>
+        <span class="status-pill" id="vacation-status">0 / {{ employees|length }} 人完成</span>
+      </div>
+
+      <div class="employee-rows" id="employee-rows" aria-label="選擇人員"></div>
+
+      <div class="vacation-workspace">
+        <div class="employee-summary">
+          <div>
+            <p class="section-kicker">目前人員</p>
+            <h3 id="active-employee-name">—</h3>
+            <p id="active-employee-rule" class="muted-text"></p>
+          </div>
+          <div class="vacation-counter" id="vacation-counter">
+            <strong>0</strong>
+            <span>休假天數</span>
+            <small>至少 {{ min_vacation_days }} 天</small>
+          </div>
+          <button class="button button-ghost" type="button" id="clear-vacation-btn">清除此人休假</button>
+        </div>
+
+        <div id="vacation-calendar" class="vacation-calendar" aria-live="polite"></div>
+      </div>
+
+      <div class="readiness-bar" id="readiness-bar">
+        <div>
+          <strong id="readiness-title">尚未完成休假設定</strong>
+          <span id="readiness-detail">每位人員至少選擇 {{ min_vacation_days }} 天。</span>
+        </div>
+        <div class="progress-track" aria-hidden="true"><span id="readiness-progress"></span></div>
+      </div>
+    </section>
+
+    <section class="panel is-locked" id="generate-section" aria-labelledby="generate-title">
+      <div class="section-heading">
+        <div>
+          <p class="section-kicker">STEP 03</p>
+          <h2 id="generate-title">產生與重新安排</h2>
+          <p>重新安排會保留日期標記與所有休假，只更換符合規則且均衡程度相近的崗位組合。</p>
+        </div>
+      </div>
+
+      <div id="validation-message" class="validation-message" role="status"></div>
+      <div class="action-row">
+        <button class="button button-primary button-large" type="button" id="generate-btn" disabled>產生四週班表</button>
+        <button class="button button-secondary button-large" type="button" id="reroll-btn" disabled>重新安排一次</button>
+        <button class="button button-ghost button-large" type="button" id="export-btn" disabled>下載 Excel</button>
+      </div>
+    </section>
+
+    <section class="panel result-panel" id="result-section" hidden aria-labelledby="result-title">
+      <div class="section-heading result-heading">
+        <div>
+          <p class="section-kicker">STEP 04</p>
+          <h2 id="result-title">班表結果與均衡統計</h2>
+          <p id="result-period-label"></p>
+        </div>
+        <div class="balance-score">
+          <span>整體均衡</span>
+          <strong id="balance-score">—</strong>
+          <small>/ 100</small>
+        </div>
+      </div>
+
+      <div id="balance-cards" class="balance-cards"></div>
+
+      <div class="result-block">
+        <div class="result-block-heading">
+          <h3>每日班表</h3>
+          <p>A、B、C 為崗位；休為休假；— 為自訂日未排。</p>
+        </div>
+        <div class="table-scroll" id="schedule-table"></div>
+      </div>
+
+      <div class="result-block">
+        <div class="result-block-heading">
+          <h3>人員統計</h3>
+          <p>連 B 次數為相鄰兩天皆為 B 的發生次數；休假、停爐與未排都會中斷。</p>
+        </div>
+        <div class="table-scroll" id="stats-table"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
-    const EMPLOYEES = {{ employees | tojson | safe }};
-    const FIXED_ROLES = {{ fixed_roles | tojson | safe }};
-    const RESTRICTED_ROLES = {{ restricted_roles | tojson | safe }};
-    const weekdayMap = ["日","一","二","三","四","五","六"];
-
-    window.lastFinalSchedule = null;
-    window.lastStartDate = "";
-    window.lastEndDate = "";
-
-    function parseDateInput(id) {
-      const v = document.getElementById(id).value;
-      if (!v) return null;
-      return new Date(v + "T00:00:00");
-    }
-
-    function buildDays() {
-      const start = parseDateInput("start-date");
-      const end = parseDateInput("end-date");
-      const container = document.getElementById("days-container");
-
-      container.innerHTML = "";
-      document.getElementById("result-panel").style.display = "none";
-      document.getElementById("stats-panel").style.display = "none";
-      document.getElementById("manual-panel").style.display = "none";
-      document.getElementById("export-btn").disabled = true;
-      document.getElementById("generate-final-btn").disabled = true;
-      document.getElementById("enter-manual-btn").disabled = true;
-      window.lastFinalSchedule = null;
-
-      if (!start || !end) {
-        alert("請先選擇起始與結束日期。");
-        return;
-      }
-      if (end < start) {
-        alert("結束日期不能早於起始日期。");
-        return;
-      }
-
-      let current = new Date(start.getTime());
-      let index = 1;
-
-      while (current <= end) {
-        const y = current.getFullYear();
-        const m = (current.getMonth() + 1).toString().padStart(2, "0");
-        const d = current.getDate().toString().padStart(2, "0");
-        const w = weekdayMap[current.getDay()];
-        const dateStr = `${y}-${m}-${d}`;
-
-        const block = document.createElement("div");
-        block.className = "day-block";
-        block.dataset.date = dateStr;
-
-        const header = document.createElement("div");
-        header.className = "day-header";
-        header.innerHTML = `
-          <span>Day ${index}｜${dateStr}（週${w}）</span>
-          <div class="right">
-            <label>
-              <input type="checkbox" class="no-burn-toggle">
-              停爐
-            </label>
-            <label>
-              <input type="checkbox" class="manual-toggle">
-              手動
-            </label>
-            <span class="tag">非手動日：勾休假（其餘=上班）</span>
-          </div>
-        `;
-        block.appendChild(header);
-
-        const empList = document.createElement("div");
-        empList.className = "emp-list";
-
-        EMPLOYEES.forEach(name => {
-          const label = document.createElement("label");
-          label.className = "emp-item";
-          label.innerHTML = `
-            <input type="checkbox" class="vac-checkbox" value="${name}">
-            ${name}
-          `;
-          empList.appendChild(label);
-        });
-
-        block.appendChild(empList);
-        container.appendChild(block);
-
-        const manualToggle = block.querySelector(".manual-toggle");
-        const noBurnToggle = block.querySelector(".no-burn-toggle");
-        const vacChecks = block.querySelectorAll(".vac-checkbox");
-
-        function refreshDisableState() {
-          const manual = manualToggle.checked;
-          const noBurn = noBurnToggle.checked;
-
-          if (noBurn) {
-            manualToggle.checked = false;
-            manualToggle.disabled = true;
-            vacChecks.forEach(cb => { cb.checked = false; cb.disabled = true; });
-            return;
-          } else {
-            manualToggle.disabled = false;
-          }
-
-          if (manual) {
-            vacChecks.forEach(cb => { cb.checked = false; cb.disabled = true; });
-          } else {
-            vacChecks.forEach(cb => { cb.disabled = false; });
-          }
-        }
-
-        manualToggle.addEventListener("change", () => {
-          refreshDisableState();
-          document.getElementById("manual-panel").style.display = "none";
-          document.getElementById("generate-final-btn").disabled = true;
-        });
-
-        noBurnToggle.addEventListener("change", () => {
-          refreshDisableState();
-          document.getElementById("manual-panel").style.display = "none";
-          document.getElementById("generate-final-btn").disabled = true;
-        });
-
-        refreshDisableState();
-
-        current.setDate(current.getDate() + 1);
-        index++;
-      }
-
-      document.getElementById("enter-manual-btn").disabled = index <= 1;
-    }
-
-    function enterManualStage() {
-      const container = document.getElementById("days-container");
-      const blocks = container.querySelectorAll(".day-block");
-      if (!blocks.length) {
-        alert("請先建立日期列表。");
-        return;
-      }
-
-      const manualDays = [];
-      blocks.forEach((block, i) => {
-        const dateStr = block.dataset.date;
-        const manual = block.querySelector(".manual-toggle").checked;
-        const noBurn = block.querySelector(".no-burn-toggle").checked;
-        if (manual && !noBurn) {
-          manualDays.push({ day_index: i + 1, date: dateStr });
-        }
-      });
-
-      buildManualPanel(manualDays);
-      document.getElementById("generate-final-btn").disabled = false;
-    }
-
-    function buildManualPanel(manualDays) {
-      const panel = document.getElementById("manual-panel");
-      const content = document.getElementById("manual-content");
-      content.innerHTML = "";
-
-      if (!manualDays.length) {
-        panel.style.display = "none";
-        return;
-      }
-
-      manualDays.forEach(day => {
-        const wrap = document.createElement("div");
-        wrap.className = "manual-day";
-        wrap.dataset.date = day.date;
-
-        wrap.innerHTML = `
-          <h3>Day ${day.day_index}｜${day.date} <span class="tag">手動：完全由你指定</span></h3>
-          <div class="grid"></div>
-        `;
-
-        const grid = wrap.querySelector(".grid");
-
-        EMPLOYEES.forEach(name => {
-          const cell = document.createElement("div");
-          cell.className = "cell";
-
-          // 受限員工只顯示允許的角色，其餘顯示全部
-          const allowed = RESTRICTED_ROLES[name] || ["A", "B", "C", "D", "E"];
-
-          let optionsHtml = `<option value="">（交給系統自動）</option>`;
-          optionsHtml += `<option value="休假">休假</option>`;
-          allowed.forEach(r => {
-            optionsHtml += `<option value="${r}">${r}</option>`;
-          });
-
-          cell.innerHTML = `
-            <span>${name}</span>
-            <select class="role-select" data-name="${name}">
-              ${optionsHtml}
-            </select>
-          `;
-          grid.appendChild(cell);
-
-          // 預填固定角色
-          const fixedRole = FIXED_ROLES[name];
-          if (fixedRole) {
-            cell.querySelector("select").value = fixedRole;
-          }
-        });
-
-        content.appendChild(wrap);
-      });
-
-      panel.style.display = "block";
-    }
-
-    async function generateFinalSchedule() {
-      const container = document.getElementById("days-container");
-      const blocks = container.querySelectorAll(".day-block");
-      if (!blocks.length) {
-        alert("請先建立日期列表。");
-        return;
-      }
-
-      // 收集手動日的 manual_assignment（以 date 為 key）
-      const manualMap = {};
-      document.querySelectorAll(".manual-day").forEach(dayBlock => {
-        const date = dayBlock.dataset.date;
-        const assignment = {};
-        dayBlock.querySelectorAll(".role-select").forEach(sel => {
-          const name = sel.dataset.name;
-          const role = sel.value;
-          if (role) assignment[name] = role; // 空字串("不排") 不送出
-        });
-        manualMap[date] = assignment;
-      });
-
-      const payloadDays = [];
-      blocks.forEach(block => {
-        const dateStr = block.dataset.date;
-        const isManual = block.querySelector(".manual-toggle").checked;
-        const isNoBurn = block.querySelector(".no-burn-toggle").checked;
-
-        if (isNoBurn) {
-          payloadDays.push({
-            date: dateStr,
-            employees_mode: "OFF",
-            mode: "AUTO",
-            employees: [],
-            manual_assignment: null
-          });
-          return;
-        }
-
-        if (isManual) {
-          payloadDays.push({
-            date: dateStr,
-            employees_mode: "WORK",
-            mode: "MANUAL",
-            employees: [],
-            manual_assignment: manualMap[dateStr] || {}
-          });
-          return;
-        }
-
-        // AUTO：收集休假 → 計算上班名單
-        const vacations = [];
-        block.querySelectorAll(".vac-checkbox").forEach(cb => {
-          if (cb.checked) vacations.push(cb.value);
-        });
-        const employees = EMPLOYEES.filter(e => !vacations.includes(e));
-
-        payloadDays.push({
-          date: dateStr,
-          employees_mode: "WORK",
-          mode: "AUTO",
-          employees: employees,
-          manual_assignment: null
-        });
-      });
-
-      const resp = await fetch("/api/generate_final", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: payloadDays })
-      });
-
-      const data = await resp.json();
-      if (!resp.ok || data.error) {
-        alert(`錯誤：${data.error || "未知錯誤"}`);
-        return;
-      }
-
-      const schedule = data.schedule || [];
-      window.lastFinalSchedule = schedule;
-      window.lastStartDate = document.getElementById("start-date").value;
-      window.lastEndDate = document.getElementById("end-date").value;
-
-      renderResult(schedule);
-      renderStats(schedule);
-
-      document.getElementById("export-btn").disabled = schedule.length === 0;
-    }
-
-    function renderResult(schedule) {
-      const panel = document.getElementById("result-panel");
-      const content = document.getElementById("result-content");
-
-      let html = "";
-      schedule.forEach(day => {
-        const dateLabel = day.date ? `｜${day.date}` : "";
-        const isOff = day.employees_mode === "OFF";
-        const isManual = day.mode === "MANUAL";
-
-        let tag = "";
-        if (isOff) tag = "（停爐）";
-        else if (isManual) tag = "（手動）";
-
-        html += `<div class="result-day">`;
-        html += `<h3>Day ${day.day_index}${dateLabel}${tag}</h3>`;
-        html += `<pre>`;
-
-        const entries = Object.entries(day.assignment || {});
-        if (!entries.length) {
-          html += `（無排班）\n`;
-        } else {
-          // 依 EMPLOYEES 順序排列
-          const ordered = EMPLOYEES.filter(n => day.assignment[n]);
-          for (const name of ordered) {
-            html += `${name}：${day.assignment[name]}\n`;
-          }
-        }
-
-        if (!isOff) {
-          const vac = day.vacations || [];
-          html += vac.length ? `\n休假：${vac.join("、")}\n` : `\n休假：無\n`;
-        }
-
-        html += `</pre>`;
-        html += `</div>`;
-      });
-
-      panel.style.display = "block";
-      content.innerHTML = html;
-    }
-
-    function renderStats(schedule) {
-      const panel = document.getElementById("stats-panel");
-      const content = document.getElementById("stats-content");
-
-      if (!schedule || !schedule.length) {
-        panel.style.display = "none";
-        content.innerHTML = "";
-        return;
-      }
-
-      const stats = {};
-      EMPLOYEES.forEach(name => {
-        stats[name] = { total: 0, A: 0, B: 0, C: 0, D: 0, E: 0, monC: 0 };
-      });
-
-      schedule.forEach(day => {
-        const dateStr = day.date;
-        let weekday = null;
-        if (dateStr) {
-          const d = new Date(dateStr + "T00:00:00");
-          if (!isNaN(d.getTime())) weekday = d.getDay(); // 0=日,1=一,...
-        }
-
-        for (const [name, role] of Object.entries(day.assignment || {})) {
-          if (!stats[name]) continue;
-          if (!["A","B","C","D","E"].includes(role)) continue;
-
-          stats[name].total += 1;
-          stats[name][role] += 1;
-
-          // 固定C員工本來就一定排C，週一C統計不具意義，排除
-          const isFixedC = FIXED_ROLES[name] === "C";
-          if (weekday === 1 && role === "C" && !isFixedC) {
-            stats[name].monC += 1;
-          }
-        }
-      });
-
-      const names = EMPLOYEES.slice(); // 依原始順序
-      let html = "<table><thead><tr>";
-      html += "<th>人員</th><th>總班數</th>";
-      html += "<th>A</th><th>B</th><th>C</th><th>D</th><th>E</th>";
-      html += "<th>週一 C</th>";
-      html += "</tr></thead><tbody>";
-
-      names.forEach(name => {
-        const s = stats[name];
-        html += "<tr>";
-        html += `<td>${name}</td>`;
-        html += `<td>${s.total}</td>`;
-        html += `<td>${s.A}</td><td>${s.B}</td><td>${s.C}</td><td>${s.D}</td><td>${s.E}</td>`;
-        html += `<td>${s.monC}</td>`;
-        html += "</tr>";
-      });
-
-      html += "</tbody></table>";
-      content.innerHTML = html;
-      panel.style.display = "block";
-    }
-
-    async function exportExcel() {
-      const schedule = window.lastFinalSchedule;
-      if (!schedule || !schedule.length) {
-        alert("請先產生最終班表，再下載 Excel。");
-        return;
-      }
-
-      const startDate = window.lastStartDate || document.getElementById("start-date").value;
-      const endDate = window.lastEndDate || document.getElementById("end-date").value;
-
-      const resp = await fetch("/api/export_excel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schedule: schedule,
-          start_date: startDate,
-          end_date: endDate
-        })
-      });
-
-      if (!resp.ok) {
-        alert("下載失敗，請稍後再試。");
-        return;
-      }
-
-      const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    }
+    window.SCHEDULER_CONFIG = {
+      employees: {{ employees | tojson }},
+      employeeRows: {{ employee_rows | tojson }},
+      restrictedRoles: {{ restricted_roles | tojson }},
+      rolePreferences: {{ role_preferences | tojson }},
+      periodDays: {{ period_days }},
+      minVacationDays: {{ min_vacation_days }}
+    };
   </script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>
