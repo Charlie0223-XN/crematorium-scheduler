@@ -34,6 +34,7 @@ html {
 
 body {
   margin: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
   color: var(--ink);
   background:
     radial-gradient(circle at 8% 4%, rgba(24, 80, 71, 0.08), transparent 28rem),
@@ -53,7 +54,11 @@ select,
 input[type="date"],
 input[type="text"],
 input[type="number"] {
-  min-height: 42px;
+  min-height: 44px;
+}
+
+button {
+  touch-action: manipulation;
 }
 
 button:focus-visible,
@@ -80,6 +85,7 @@ input:focus-visible {
 }
 
 .app-header {
+  padding-top: env(safe-area-inset-top, 0);
   color: #fff;
   background: var(--forest-deep);
   border-bottom: 5px solid var(--orange);
@@ -176,10 +182,66 @@ h1 {
   line-height: 1.1;
 }
 
+.header-facts .connection-fact strong {
+  color: #f4d179;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.header-facts .connection-fact.is-offline strong {
+  color: #ffc7b2;
+}
+
 .header-facts span {
   margin-top: 3px;
   color: #afc8c2;
   font-size: 0.72rem;
+}
+
+.install-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(110deg, var(--forest-deep), var(--forest));
+  box-shadow: var(--shadow);
+}
+
+.install-card-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--forest-deep);
+  background: #f4d179;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.install-card strong,
+.install-card p {
+  margin: 0;
+}
+
+.install-card p {
+  margin-top: 2px;
+  color: #dce9e5;
+  font-size: 0.88rem;
+}
+
+.local-data-note {
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: #dce9e5;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .page-shell {
@@ -956,7 +1018,7 @@ td:last-child {
   position: fixed;
   z-index: 50;
   right: 22px;
-  bottom: 22px;
+  bottom: max(22px, calc(env(safe-area-inset-bottom, 0) + 10px));
   max-width: min(420px, calc(100% - 44px));
   padding: 11px 15px;
   color: #fff;
@@ -1009,6 +1071,15 @@ td:last-child {
 
   .header-facts div {
     flex: 1;
+  }
+
+  .install-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .local-data-note {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .stepper {
@@ -1066,6 +1137,20 @@ td:last-child {
 
   .subtitle {
     display: none;
+  }
+
+  .header-facts div {
+    min-width: 0;
+    padding: 8px 7px;
+  }
+
+  .header-facts strong {
+    font-size: 1.08rem;
+  }
+
+  .install-card {
+    margin-bottom: 12px;
+    padding: 12px;
   }
 
   .panel {

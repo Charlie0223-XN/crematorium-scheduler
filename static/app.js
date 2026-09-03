@@ -1,3 +1,6 @@
+import { generatePeriod } from "./scheduler.js";
+import { buildScheduleWorkbook, MIME_TYPE } from "./excel.js";
+
 "use strict";
 
 const CONFIG = window.SCHEDULER_CONFIG;
@@ -8,6 +11,8 @@ const TYPE_LABELS = {
   CUSTOM: "其他",
 };
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+const STORAGE_KEY = "crematorium-scheduler-offline-v1";
+const STORAGE_VERSION = 1;
 
 const state = {
   days: [],
@@ -48,9 +53,13 @@ const elements = {
   scheduleTable: document.getElementById("schedule-table"),
   statsTable: document.getElementById("stats-table"),
   toast: document.getElementById("toast"),
+  connectionStatus: document.getElementById("connection-status"),
+  installCard: document.getElementById("install-card"),
 };
 
 let toastTimer = null;
+let saveTimer = null;
+let offlineReady = false;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -94,6 +103,114 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => elements.toast.classList.remove("is-visible"), 2800);
 }
 
+function updateConnectionStatus() {
+  const offline = !navigator.onLine;
+  elements.connectionStatus.textContent = offline ? "離線運作" : (offlineReady ? "可離線" : "已連線");
+  elements.connectionStatus.parentElement.classList.toggle("is-offline", offline);
+}
+
+function setupPwa() {
+  updateConnectionStatus();
+  window.addEventListener("online", updateConnectionStatus);
+  window.addEventListener("offline", updateConnectionStatus);
+  if (window.navigator.standalone === true) elements.installCard.hidden = true;
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./service-worker.js")
+      .then(() => navigator.serviceWorker.ready)
+      .then(() => {
+        offlineReady = true;
+        updateConnectionStatus();
+      })
+      .catch(() => {
+        elements.connectionStatus.textContent = "需先連線";
+      });
+  } else {
+    elements.connectionStatus.textContent = "需 HTTPS";
+  }
+}
+
+function stateSnapshot() {
+  return {
+    version: STORAGE_VERSION,
+    employees: [...CONFIG.employees],
+    days: state.days,
+    vacations: Object.fromEntries(
+      CONFIG.employees.map((name) => [name, [...state.vacations[name]].sort()]),
+    ),
+    activeEmployee: state.activeEmployee,
+    lastPayload: state.lastPayload,
+    lastResult: state.lastResult,
+  };
+}
+
+function saveStateNow() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateSnapshot()));
+  } catch {
+    showToast("這台裝置無法保存資料，請確認 Safari 未使用私密瀏覽。");
+  }
+}
+
+function scheduleSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(saveStateNow, 120);
+}
+
+function restoreState() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+  } catch {
+    return false;
+  }
+  if (!saved || saved.version !== STORAGE_VERSION) return false;
+  if (JSON.stringify(saved.employees) !== JSON.stringify(CONFIG.employees)) return false;
+  if (!Array.isArray(saved.days) || saved.days.length !== CONFIG.periodDays) return false;
+
+  const dayDates = new Set(saved.days.map((day) => day.date));
+  if (dayDates.size !== CONFIG.periodDays) return false;
+  state.days = saved.days.map((day) => ({
+    date: String(day.date),
+    dayType: TYPE_LABELS[day.dayType] ? day.dayType : "NORMAL",
+    label: String(day.label || "").slice(0, 40),
+    requirements: {
+      A: Number(day.requirements?.A || 0),
+      B: Number(day.requirements?.B || 0),
+      C: Number(day.requirements?.C || 0),
+    },
+  }));
+  state.vacations = Object.fromEntries(CONFIG.employees.map((name) => {
+    const dates = Array.isArray(saved.vacations?.[name])
+      ? saved.vacations[name].filter((date) => dayDates.has(date))
+      : [];
+    return [name, new Set(dates)];
+  }));
+  state.activeEmployee = CONFIG.employees.includes(saved.activeEmployee)
+    ? saved.activeEmployee
+    : CONFIG.employees[0];
+  state.lastPayload = saved.lastPayload || null;
+  state.lastResult = saved.lastResult || null;
+
+  elements.startDate.value = state.days[0].date;
+  elements.endDate.value = state.days[state.days.length - 1].date;
+  elements.daysEmpty.hidden = true;
+  elements.vacationSection.classList.remove("is-locked");
+  setStepState(1, "complete");
+  renderDaysGrid();
+  renderEmployeeRows();
+  renderVacationCalendar();
+  updateReadiness();
+
+  if (state.lastResult?.schedule?.length === CONFIG.periodDays) {
+    renderResult(state.lastResult);
+    elements.reroll.disabled = false;
+    elements.export.disabled = false;
+    setStepState(3, "complete");
+    setStepState(4, "active");
+  }
+  return true;
+}
+
 function setStepState(step, mode) {
   const item = document.querySelector(`[data-step-indicator="${step}"]`);
   if (!item) return;
@@ -110,6 +227,7 @@ function invalidateResult(notify = false) {
   elements.export.disabled = true;
   setStepState(4, "idle");
   if (notify && hadResult) showToast("設定已變更，請重新產生班表。");
+  scheduleSave();
 }
 
 function updateEndDatePreview() {
@@ -200,7 +318,7 @@ function renderDaysGrid() {
           <div class="custom-counts">
             ${["A", "B", "C"].map((role) => `
               <label>${role}
-                <input data-action="custom-count" data-role="${role}" type="number" min="0" max="13"
+                <input data-action="custom-count" data-role="${role}" type="number" min="0" max="${CONFIG.employees.length}"
                        value="${day.requirements[role]}" aria-label="${day.date} ${role} 人數">
               </label>
             `).join("")}
@@ -251,7 +369,9 @@ function handleDaysGridChange(event) {
   if (action === "custom-count") {
     const role = event.target.dataset.role;
     const parsed = Number.parseInt(event.target.value, 10);
-    day.requirements[role] = Number.isFinite(parsed) ? Math.max(0, Math.min(13, parsed)) : 0;
+    day.requirements[role] = Number.isFinite(parsed)
+      ? Math.max(0, Math.min(CONFIG.employees.length, parsed))
+      : 0;
     event.target.value = day.requirements[role];
     const rule = card.querySelector(".day-rule");
     if (rule) rule.textContent = dayRuleText(day);
@@ -282,6 +402,7 @@ function selectEmployee(name) {
   state.activeEmployee = name;
   renderEmployeeRows();
   renderVacationCalendar();
+  scheduleSave();
 }
 
 function renderVacationCalendar() {
@@ -433,13 +554,8 @@ async function generateSchedule(isReroll) {
   elements.validationMessage.classList.remove("is-error");
 
   try {
-    const response = await fetch("/api/generate_final", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok || data.error) throw new Error(data.error || "產生班表失敗");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const data = generatePeriod(payload.days, payload.vacations, payload.seed, CONFIG);
 
     state.lastPayload = payload;
     state.lastResult = data;
@@ -451,6 +567,7 @@ async function generateSchedule(isReroll) {
       : "班表產生完成。";
     setStepState(3, "complete");
     setStepState(4, "active");
+    saveStateNow();
     showToast(isReroll ? "已換成另一組符合規則的班表。" : "四週班表已產生。");
     elements.resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
@@ -546,21 +663,35 @@ async function exportExcel() {
 
   setBusy(true);
   try {
-    const response = await fetch("/api/export_excel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state.lastPayload),
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || "Excel 下載失敗");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const blob = buildScheduleWorkbook(
+      state.lastResult,
+      state.lastPayload.vacations,
+      CONFIG,
+    );
+    const filename = `schedule_${state.days[0].date}_to_${state.days[state.days.length - 1].date}.xlsx`;
+    const file = new File([blob], filename, { type: MIME_TYPE });
+
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: "新廠四週班表",
+        });
+        showToast("Excel 已交給 iPhone 分享選單。");
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          showToast("已取消分享 Excel。");
+          return;
+        }
+      }
     }
 
-    const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `schedule_${state.days[0].date}_to_${state.days[state.days.length - 1].date}.xlsx`;
+    anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -590,6 +721,10 @@ elements.generate.addEventListener("click", () => generateSchedule(false));
 elements.reroll.addEventListener("click", () => generateSchedule(true));
 elements.export.addEventListener("click", exportExcel);
 
-const today = new Date();
-elements.startDate.value = localDateString(today);
-updateEndDatePreview();
+const restored = restoreState();
+if (!restored) {
+  const today = new Date();
+  elements.startDate.value = localDateString(today);
+  updateEndDatePreview();
+}
+setupPwa();

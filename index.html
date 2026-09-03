@@ -4,8 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="新廠四週人員休假與崗位排班工具">
+  <meta name="theme-color" content="#103d37">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="四週排班">
   <title>新廠四週排班</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="manifest" href="./static/manifest.webmanifest">
+  <link rel="icon" href="./static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./static/apple-touch-icon.png">
+  <link rel="stylesheet" href="./static/style.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要內容</a>
@@ -21,14 +28,24 @@
         </div>
       </div>
       <div class="header-facts" aria-label="排班基本資訊">
-        <div><strong>{{ period_days }}</strong><span>天</span></div>
-        <div><strong>{{ employees|length }}</strong><span>人</span></div>
+        <div><strong>28</strong><span>天</span></div>
+        <div><strong>12</strong><span>人</span></div>
         <div><strong>3</strong><span>崗位</span></div>
+        <div class="connection-fact"><strong id="connection-status">準備中</strong><span>離線版</span></div>
       </div>
     </div>
   </header>
 
   <main id="main-content" class="page-shell">
+    <aside class="install-card" id="install-card" aria-label="iPhone 安裝說明">
+      <div class="install-card-icon" aria-hidden="true">↗</div>
+      <div>
+        <strong>安裝到 iPhone 主畫面</strong>
+        <p>用 Safari 開啟後，點「分享」→「加入主畫面」。首次載入完成後，沒有網路也能排班。</p>
+      </div>
+      <span class="local-data-note">資料只存在這台裝置</span>
+    </aside>
+
     <nav class="stepper" aria-label="排班流程">
       <div class="step-item is-active" data-step-indicator="1">
         <span class="step-number">01</span>
@@ -36,7 +53,7 @@
       </div>
       <div class="step-item" data-step-indicator="2">
         <span class="step-number">02</span>
-        <span><strong>人員休假</strong><small>每人至少 {{ min_vacation_days }} 天</small></span>
+        <span><strong>人員休假</strong><small>每人至少 8 天</small></span>
       </div>
       <div class="step-item" data-step-indicator="3">
         <span class="step-number">03</span>
@@ -92,7 +109,7 @@
           <h2 id="vacation-title">依人員選擇休假日</h2>
           <p>切換人名後直接點日期。停爐日會鎖定，其他未選日期都視為可以排班。</p>
         </div>
-        <span class="status-pill" id="vacation-status">0 / {{ employees|length }} 人完成</span>
+        <span class="status-pill" id="vacation-status">0 / 12 人完成</span>
       </div>
 
       <div class="employee-rows" id="employee-rows" aria-label="選擇人員"></div>
@@ -107,7 +124,7 @@
           <div class="vacation-counter" id="vacation-counter">
             <strong>0</strong>
             <span>休假天數</span>
-            <small>至少 {{ min_vacation_days }} 天</small>
+            <small>至少 8 天</small>
           </div>
           <button class="button button-ghost" type="button" id="clear-vacation-btn">清除此人休假</button>
         </div>
@@ -118,7 +135,7 @@
       <div class="readiness-bar" id="readiness-bar">
         <div>
           <strong id="readiness-title">尚未完成休假設定</strong>
-          <span id="readiness-detail">每位人員至少選擇 {{ min_vacation_days }} 天。</span>
+          <span id="readiness-detail">每位人員至少選擇 8 天。</span>
         </div>
         <div class="progress-track" aria-hidden="true"><span id="readiness-progress"></span></div>
       </div>
@@ -179,14 +196,14 @@
 
   <script>
     window.SCHEDULER_CONFIG = {
-      employees: {{ employees | tojson }},
-      employeeRows: {{ employee_rows | tojson }},
-      restrictedRoles: {{ restricted_roles | tojson }},
-      rolePreferences: {{ role_preferences | tojson }},
-      periodDays: {{ period_days }},
-      minVacationDays: {{ min_vacation_days }}
+      employees: ["\u8c50\u6770", "\u5b5f\u6853", "\u7acb\u7fa4", "\u5b78\u6797", "\u5929\u7acb", "\u4e95\u4ec1", "\u5d07\u8aa0", "\u5728\u6176", "\u7d00\u9f8d", "\u5b50\u7d18", "\u4fca\u744b", "\u5448\u54f2"],
+      employeeRows: [["\u8c50\u6770", "\u5b5f\u6853", "\u7acb\u7fa4", "\u5b78\u6797", "\u5929\u7acb", "\u4e95\u4ec1", "\u5d07\u8aa0"], ["\u5728\u6176", "\u7d00\u9f8d", "\u5b50\u7d18", "\u4fca\u744b", "\u5448\u54f2"]],
+      restrictedRoles: {"\u5728\u6176": ["B", "C"], "\u5929\u7acb": ["B", "C"]},
+      rolePreferences: {"\u5728\u6176": {"B": 1.5, "C": 0.5}, "\u5929\u7acb": {"B": 1.5, "C": 0.5}},
+      periodDays: 28,
+      minVacationDays: 8
     };
   </script>
-  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script src="./static/app.js" type="module"></script>
 </body>
 </html>

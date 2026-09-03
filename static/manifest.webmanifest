@@ -1,0 +1,25 @@
+{
+  "name": "新廠四週排班",
+  "short_name": "四週排班",
+  "description": "離線選擇休假、自動安排 A／B／C 崗位並匯出班表",
+  "lang": "zh-Hant",
+  "start_url": "../",
+  "scope": "../",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f3f0e9",
+  "theme_color": "#103d37",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

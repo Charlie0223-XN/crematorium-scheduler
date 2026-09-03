@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="四週排班">
+  <rect width="512" height="512" rx="108" fill="#103d37"/>
+  <path d="M0 368L512 222V512H0Z" fill="#185047"/>
+  <rect x="86" y="82" width="340" height="348" rx="72" fill="#fffdf9"/>
+  <rect x="86" y="82" width="340" height="106" rx="72" fill="#f4d179"/>
+  <rect x="86" y="144" width="340" height="44" fill="#f4d179"/>
+  <circle cx="170" cy="111" r="22" fill="#103d37"/>
+  <circle cx="342" cy="111" r="22" fill="#103d37"/>
+  <text x="256" y="325" text-anchor="middle" font-family="Arial, sans-serif" font-size="142" font-weight="800" fill="#103d37">4W</text>
+  <rect x="150" y="362" width="212" height="16" rx="8" fill="#c96536"/>
+</svg>
