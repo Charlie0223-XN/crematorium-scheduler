@@ -588,7 +588,7 @@ h1 {
 
 .custom-counts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -885,7 +885,7 @@ h1 {
 .balance-cards {
   margin-bottom: 22px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1008,8 +1008,10 @@ td:last-child {
 }
 
 .role-a { background: var(--yellow-soft); }
+.role-small-a { color: #513477; background: var(--purple-soft); }
 .role-b { background: var(--blue-soft); }
 .role-c { background: var(--green-soft); }
+.role-d { color: #74471e; background: var(--orange-soft); }
 .role-vacation { color: #843d3d; background: var(--red-soft); }
 .role-off,
 .role-unassigned { color: #687573; background: #edf0ee; }
