@@ -1,3 +1,5 @@
+import { ROLES } from "./scheduler.js";
+
 const MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const WEEKDAY_NAMES = ["一", "二", "三", "四", "五", "六", "日"];
 const DAY_TYPE_NAMES = {
@@ -68,11 +70,11 @@ function scheduleSheet(result, config) {
   const headers = ["日期", "週", "類型", "標記", "需求", ...config.employees];
   const rows = [rowXml(1, headers, headers.map(() => 1))];
   const rowStyles = { NORMAL: 11, BIG: 2, OFF: 3, CUSTOM: 4 };
-  const roleStyles = { A: 5, B: 6, C: 7, 休假: 8, 未排: 9, 停爐: 3 };
+  const roleStyles = { A: 5, a: 4, B: 6, C: 7, D: 2, 休假: 8, 未排: 9, 停爐: 3 };
 
   result.schedule.forEach((day, index) => {
     const requirements = day.requirements;
-    const requirementText = ["A", "B", "C"].map((role) => `${role}${requirements[role]}`).join(" / ");
+    const requirementText = ROLES.map((role) => `${role}${requirements[role]}`).join(" / ");
     const values = [
       day.date,
       `週${WEEKDAY_NAMES[day.weekday]}`,
@@ -96,7 +98,7 @@ function scheduleSheet(result, config) {
   const lastColumn = columnName(headers.length);
   return worksheetXml({
     rows,
-    widths: [13, 6, 9, 16, 18, ...config.employees.map(() => 8)],
+    widths: [13, 6, 9, 16, 30, ...config.employees.map(() => 8)],
     lastColumn,
     lastRow: result.schedule.length + 1,
     freeze: { x: 5, y: 1, cell: "F2" },
@@ -106,8 +108,8 @@ function scheduleSheet(result, config) {
 
 function statsSheet(result) {
   const headers = [
-    "人員", "休假", "可排", "實排", "未排", "A", "B", "C",
-    "A比例", "B比例", "C比例", "連B次數", "最長連B", "期末連B",
+    "人員", "休假", "可排", "實排", "未排", ...ROLES,
+    ...ROLES.map((role) => `${role}比例`), "連B次數", "最長連B", "期末連B", "連C次數", "最長連C", "期末連C",
   ];
   const rows = [
     rowXml(1, ["整體均衡分數", result.stats.balance.overall_score, "滿分 100；依每人可排天數與允許角色比較"], [1, 11, 11]),
@@ -121,17 +123,17 @@ function statsSheet(result) {
       stat.available_days,
       stat.assigned_days,
       stat.unassigned_days,
-      stat.role_counts.A,
-      stat.role_counts.B,
-      stat.role_counts.C,
-      stat.role_percentages.A,
-      stat.role_percentages.B,
-      stat.role_percentages.C,
+      ...ROLES.map((role) => stat.role_counts[role]),
+      ...ROLES.map((role) => stat.role_percentages[role]),
       stat.consecutive_b_occurrences,
       stat.longest_b_streak,
       stat.ending_b_streak,
+      stat.consecutive_c_occurrences,
+      stat.longest_c_streak,
+      stat.ending_c_streak,
     ];
-    const styles = values.map((_, column) => (column >= 8 && column <= 10 ? 10 : 11));
+    const percentStart = 5 + ROLES.length;
+    const styles = values.map((_, column) => (column >= percentStart && column < percentStart + ROLES.length ? 10 : 11));
     rows.push(rowXml(index + 4, values, styles));
   });
 
