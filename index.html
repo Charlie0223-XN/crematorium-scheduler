@@ -22,15 +22,15 @@
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true">4W</div>
         <div>
-          <p class="eyebrow">NEW FACILITY · SCHEDULER V2</p>
+          <p class="eyebrow">NEW FACILITY · SCHEDULER V3</p>
           <h1>新廠四週排班</h1>
-          <p class="subtitle">先定義日期，再逐人選休假，最後交給系統平衡 A／B／C。</p>
+          <p class="subtitle">先定義日期，再逐人選休假，最後交給系統平衡 A／a／B／C／D。</p>
         </div>
       </div>
       <div class="header-facts" aria-label="排班基本資訊">
         <div><strong>28</strong><span>天</span></div>
         <div><strong>12</strong><span>人</span></div>
-        <div><strong>3</strong><span>崗位</span></div>
+        <div><strong>5</strong><span>崗位</span></div>
         <div class="connection-fact"><strong id="connection-status">準備中</strong><span>離線版</span></div>
       </div>
     </div>
@@ -89,10 +89,10 @@
       </div>
 
       <div class="legend" aria-label="日期類型說明">
-        <span><i class="legend-dot type-normal"></i>一般日：2A＋2C＋其餘B</span>
-        <span><i class="legend-dot type-big"></i>大日：加強避免連B</span>
+        <span><i class="legend-dot type-normal"></i>8 人：A＋a＋BB＋CC＋DD；不足先減 B 再減 a，多人加 C；少於 5 人請用其他</span>
+        <span><i class="legend-dot type-big"></i>大日：加強避免連 B／一般人員連 C</span>
         <span><i class="legend-dot type-off"></i>停爐：全日不排</span>
-        <span><i class="legend-dot type-custom"></i>其他：自訂A／B／C人數</span>
+        <span><i class="legend-dot type-custom"></i>其他：自訂 A／a／B／C／D 人數</span>
       </div>
 
       <div id="days-empty" class="empty-state">
@@ -177,7 +177,7 @@
       <div class="result-block">
         <div class="result-block-heading">
           <h3>每日班表</h3>
-          <p>A、B、C 為崗位；休為休假；— 為自訂日未排。</p>
+          <p>A、a、B、C、D 為崗位（A 與 a 分開計算）；休為休假；— 為自訂日未排。</p>
         </div>
         <div class="table-scroll" id="schedule-table"></div>
       </div>
@@ -185,7 +185,7 @@
       <div class="result-block">
         <div class="result-block-heading">
           <h3>人員統計</h3>
-          <p>連 B 次數為相鄰兩天皆為 B 的發生次數；休假、停爐與未排都會中斷。</p>
+          <p>連 B／連 C 次數為相鄰兩天皆為該崗位的發生次數；休假、停爐與未排都會中斷。</p>
         </div>
         <div class="table-scroll" id="stats-table"></div>
       </div>
@@ -198,8 +198,8 @@
     window.SCHEDULER_CONFIG = {
       employees: ["\u8c50\u6770", "\u5b5f\u6853", "\u7acb\u7fa4", "\u5b78\u6797", "\u5929\u7acb", "\u4e95\u4ec1", "\u5d07\u8aa0", "\u5728\u6176", "\u7d00\u9f8d", "\u5b50\u7d18", "\u4fca\u744b", "\u5448\u54f2"],
       employeeRows: [["\u8c50\u6770", "\u5b5f\u6853", "\u7acb\u7fa4", "\u5b78\u6797", "\u5929\u7acb", "\u4e95\u4ec1", "\u5d07\u8aa0"], ["\u5728\u6176", "\u7d00\u9f8d", "\u5b50\u7d18", "\u4fca\u744b", "\u5448\u54f2"]],
-      restrictedRoles: {"\u5728\u6176": ["B", "C"], "\u5929\u7acb": ["B", "C"]},
-      rolePreferences: {"\u5728\u6176": {"B": 1.5, "C": 0.5}, "\u5929\u7acb": {"B": 1.5, "C": 0.5}},
+      restrictedRoles: {"\u5728\u6176": ["B", "C", "D"], "\u5929\u7acb": ["B", "C", "D"]},
+      rolePreferences: {"\u5728\u6176": {"B": 0.5, "C": 1.5, "D": 0.5}, "\u5929\u7acb": {"B": 0.5, "C": 1.5, "D": 0.5}},
       periodDays: 28,
       minVacationDays: 8
     };
