@@ -1,4 +1,4 @@
-import { generatePeriod } from "./scheduler.js";
+import { generatePeriod, ROLES, RULES_VERSION } from "./scheduler.js";
 import { buildScheduleWorkbook, MIME_TYPE } from "./excel.js";
 
 "use strict";
@@ -173,11 +173,7 @@ function restoreState() {
     date: String(day.date),
     dayType: TYPE_LABELS[day.dayType] ? day.dayType : "NORMAL",
     label: String(day.label || "").slice(0, 40),
-    requirements: {
-      A: Number(day.requirements?.A || 0),
-      B: Number(day.requirements?.B || 0),
-      C: Number(day.requirements?.C || 0),
-    },
+    requirements: Object.fromEntries(ROLES.map((role) => [role, Number(day.requirements?.[role] || 0)])),
   }));
   state.vacations = Object.fromEntries(CONFIG.employees.map((name) => {
     const dates = Array.isArray(saved.vacations?.[name])
@@ -188,8 +184,12 @@ function restoreState() {
   state.activeEmployee = CONFIG.employees.includes(saved.activeEmployee)
     ? saved.activeEmployee
     : CONFIG.employees[0];
-  state.lastPayload = saved.lastPayload || null;
-  state.lastResult = saved.lastResult || null;
+  const sameRules = saved.lastResult?.rules_version === RULES_VERSION;
+  state.lastPayload = sameRules ? saved.lastPayload || null : null;
+  state.lastResult = sameRules ? saved.lastResult || null : null;
+  if (saved.lastResult && !sameRules) {
+    showToast("已更新五崗位規則；日期與休假已保留，請重新產生班表。");
+  }
 
   elements.startDate.value = state.days[0].date;
   elements.endDate.value = state.days[state.days.length - 1].date;
@@ -267,7 +267,7 @@ function buildPeriod() {
       date: localDateString(date),
       dayType: "NORMAL",
       label: "",
-      requirements: { A: 0, B: 2, C: 0 },
+      requirements: { A: 0, a: 0, B: 2, C: 0, D: 0 },
     };
   });
   state.vacations = Object.fromEntries(CONFIG.employees.map((name) => [name, new Set()]));
@@ -287,11 +287,10 @@ function buildPeriod() {
 }
 
 function dayRuleText(day) {
-  if (day.dayType === "NORMAL") return "2A · 2C · 其餘 B";
-  if (day.dayType === "BIG") return "同一般日，加強避免連 B";
+  if (day.dayType === "NORMAL") return "8人：A · a · BB · CC · DD；不足先減B再減a，多人加C";
+  if (day.dayType === "BIG") return "同一般日，加強避免連 B／一般人員連 C";
   if (day.dayType === "OFF") return "全日不排班";
-  const { A, B, C } = day.requirements;
-  return `自訂 A${A} · B${B} · C${C}`;
+  return `自訂 ${ROLES.map((role) => `${role}${day.requirements[role]}`).join(" · ")}`;
 }
 
 function renderDaysGrid() {
@@ -316,7 +315,7 @@ function renderDaysGrid() {
                  value="${escapeHtml(day.label)}" placeholder="標記名稱，例如：停爐留守"
                  aria-label="${day.date} 自訂標記名稱">
           <div class="custom-counts">
-            ${["A", "B", "C"].map((role) => `
+            ${ROLES.map((role) => `
               <label>${role}
                 <input data-action="custom-count" data-role="${role}" type="number" min="0" max="${CONFIG.employees.length}"
                        value="${day.requirements[role]}" aria-label="${day.date} ${role} 人數">
@@ -414,8 +413,8 @@ function renderVacationCalendar() {
 
   elements.activeEmployeeName.textContent = name;
   elements.activeEmployeeRule.textContent = restricted
-    ? "僅排 B／C，且 B 的分配權重大於 C。"
-    : "可排 A／B／C。";
+    ? "輪排 B／C／D（不排 A、a）；C 的分配權重大於 D、B，不套用避免連 C。"
+    : "可排 A／a／B／C／D。前一天 C，隔天優先 A／a，其次 D，盡量避免連 C。";
   elements.vacationCounter.innerHTML = `
     <strong>${selected.size}</strong>
     <span>休假天數</span>
@@ -476,7 +475,7 @@ function customDayErrors() {
     if (day.dayType !== "CUSTOM") return;
     const vacationCount = CONFIG.employees.filter((name) => state.vacations[name].has(day.date)).length;
     const available = CONFIG.employees.length - vacationCount;
-    const needed = day.requirements.A + day.requirements.B + day.requirements.C;
+    const needed = ROLES.reduce((sum, role) => sum + day.requirements[role], 0);
     if (needed > available) {
       errors.push(`${day.date} 自訂需求 ${needed} 人，但只有 ${available} 人可排`);
     }
@@ -587,7 +586,7 @@ function roleCell(day, name) {
   if (day.day_type === "OFF") return ["停", "role-off"];
   if (day.vacations.includes(name)) return ["休", "role-vacation"];
   const role = day.assignment[name];
-  if (role) return [role, `role-${role.toLowerCase()}`];
+  if (role) return [role, role === "a" ? "role-small-a" : `role-${role.toLowerCase()}`];
   return ["—", "role-unassigned"];
 }
 
@@ -598,7 +597,7 @@ function renderResult(data) {
   elements.resultPeriodLabel.textContent = `${schedule[0].date} ～ ${schedule[schedule.length - 1].date} · 工作日 ${stats.working_days} · 停爐 ${stats.off_days} · 大日 ${stats.big_days} · 其他 ${stats.custom_days}`;
   elements.balanceScore.textContent = Number(stats.balance.overall_score).toFixed(1);
 
-  elements.balanceCards.innerHTML = ["A", "B", "C"].map((role) => {
+  elements.balanceCards.innerHTML = ROLES.map((role) => {
     const item = stats.balance.roles[role];
     return `
       <div class="balance-card">
@@ -633,7 +632,7 @@ function renderResult(data) {
   const statsHead = `
     <thead><tr>
       <th>人員</th><th>休假</th><th>可排</th><th>實排</th><th>未排</th>
-      <th>A</th><th>B</th><th>C</th><th>B比例</th><th>連B次數</th><th>最長連B</th><th>期末連B</th>
+      ${ROLES.map((role) => `<th>${role}</th>`).join("")}<th>B比例</th><th>連B次數</th><th>最長連B</th><th>期末連B</th><th>連C次數</th><th>最長連C</th><th>期末連C</th>
     </tr></thead>
   `;
   const statsBody = stats.employees.map((item) => `
@@ -643,13 +642,14 @@ function renderResult(data) {
       <td>${item.available_days}</td>
       <td>${item.assigned_days}</td>
       <td>${item.unassigned_days}</td>
-      <td>${item.role_counts.A}</td>
-      <td>${item.role_counts.B}</td>
-      <td>${item.role_counts.C}</td>
+      ${ROLES.map((role) => `<td>${item.role_counts[role]}</td>`).join("")}
       <td>${(item.role_percentages.B * 100).toFixed(1)}%</td>
       <td>${item.consecutive_b_occurrences}</td>
       <td>${item.longest_b_streak}</td>
       <td>${item.ending_b_streak}</td>
+      <td>${item.consecutive_c_occurrences}</td>
+      <td>${item.longest_c_streak}</td>
+      <td>${item.ending_c_streak}</td>
     </tr>
   `).join("");
   elements.statsTable.innerHTML = `<table>${statsHead}<tbody>${statsBody}</tbody></table>`;
