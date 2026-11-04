@@ -1,4 +1,5 @@
-export const ROLES = Object.freeze(["A", "B", "C"]);
+export const ROLES = Object.freeze(["A", "a", "B", "C", "D"]);
+export const RULES_VERSION = "five-roles-20261104";
 export const DAY_TYPES = Object.freeze(["NORMAL", "BIG", "OFF", "CUSTOM"]);
 
 export class ScheduleError extends Error {
@@ -29,9 +30,9 @@ function allowedRoles(name, config) {
   return configured.filter((role) => ROLES.includes(role));
 }
 
-function requirementsForDay(day, availableCount) {
+export function requirementsForDay(day, availableCount) {
   const dayType = String(day.day_type || "NORMAL").toUpperCase();
-  if (dayType === "OFF") return { A: 0, B: 0, C: 0 };
+  if (dayType === "OFF") return Object.fromEntries(ROLES.map((role) => [role, 0]));
 
   if (dayType === "CUSTOM") {
     const source = day.requirements || {};
@@ -50,10 +51,17 @@ function requirementsForDay(day, availableCount) {
     return requirements;
   }
 
-  const aCount = Math.min(2, availableCount);
-  const cCount = Math.min(2, Math.max(0, availableCount - aCount));
-  const bCount = Math.max(0, availableCount - aCount - cCount);
-  return { A: aCount, B: bCount, C: cCount };
+  if (availableCount < 5) {
+    throw new ScheduleError(`${day.date || "該日"} 只有 ${availableCount} 人可排班，少於 5 人；請將該日改為「其他」自訂崗位人數`);
+  }
+  const shortage = Math.max(0, 8 - availableCount);
+  return {
+    A: 1,
+    a: shortage >= 3 ? 0 : 1,
+    B: Math.max(0, 2 - shortage),
+    C: 2 + Math.max(0, availableCount - 8),
+    D: 2,
+  };
 }
 
 function optionScore({
@@ -80,11 +88,19 @@ function optionScore({
 
   score += Number(config.rolePreferences?.[name]?.[role] || 0);
 
+  const bigMultiplier = dayType === "BIG" ? 1.8 : 1;
   if (previousAssignment[name] === "B") {
-    const bigMultiplier = dayType === "BIG" ? 1.8 : 1;
     if (role === "A") score += 5 * bigMultiplier;
     else if (role === "C") score += 3 * bigMultiplier;
     else if (role === "B") score -= 6 * bigMultiplier;
+  }
+
+  // C fatigue applies to ordinary employees only. The two restricted
+  // employees have an explicit C preference instead.
+  if (previousAssignment[name] === "C" && !config.restrictedRoles?.[name]) {
+    if (role === "A" || role === "a") score += 5 * bigMultiplier;
+    else if (role === "D") score += 3 * bigMultiplier;
+    else if (role === "C") score -= 6 * bigMultiplier;
   }
 
   return score + tieNoise;
@@ -120,8 +136,9 @@ function assignDay({
     });
   });
 
+  const emptyCounts = ROLES.map(() => 0);
   let states = new Map([
-    ["0,0,0", { counts: [0, 0, 0], score: 0, assignment: {} }],
+    [emptyCounts.join(","), { counts: emptyCounts, score: 0, assignment: {} }],
   ]);
 
   available.forEach((name) => {
@@ -186,6 +203,7 @@ export function calculateStats(schedule, vacations, config) {
   );
   const employeeStats = {};
   const streaks = Object.fromEntries(employees.map((name) => [name, 0]));
+  const cStreaks = Object.fromEntries(employees.map((name) => [name, 0]));
 
   employees.forEach((name) => {
     employeeStats[name] = {
@@ -198,6 +216,9 @@ export function calculateStats(schedule, vacations, config) {
       consecutive_b_occurrences: 0,
       longest_b_streak: 0,
       ending_b_streak: 0,
+      consecutive_c_occurrences: 0,
+      longest_c_streak: 0,
+      ending_c_streak: 0,
       allowed_roles: allowedRoles(name, config),
     };
   });
@@ -214,7 +235,7 @@ export function calculateStats(schedule, vacations, config) {
 
     if (dayType === "OFF") {
       offDays += 1;
-      employees.forEach((name) => { streaks[name] = 0; });
+      employees.forEach((name) => { streaks[name] = 0; cStreaks[name] = 0; });
       return;
     }
 
@@ -227,6 +248,7 @@ export function calculateStats(schedule, vacations, config) {
       if (vacationSets[name].has(date)) {
         stat.vacation_days += 1;
         streaks[name] = 0;
+        cStreaks[name] = 0;
         return;
       }
 
@@ -235,11 +257,19 @@ export function calculateStats(schedule, vacations, config) {
       if (!ROLES.includes(role)) {
         stat.unassigned_days += 1;
         streaks[name] = 0;
+        cStreaks[name] = 0;
         return;
       }
 
       stat.assigned_days += 1;
       stat.role_counts[role] += 1;
+      if (role === "C") {
+        if (cStreaks[name] >= 1) stat.consecutive_c_occurrences += 1;
+        cStreaks[name] += 1;
+        stat.longest_c_streak = Math.max(stat.longest_c_streak, cStreaks[name]);
+      } else {
+        cStreaks[name] = 0;
+      }
       if (role === "B") {
         if (streaks[name] >= 1) stat.consecutive_b_occurrences += 1;
         streaks[name] += 1;
@@ -253,6 +283,7 @@ export function calculateStats(schedule, vacations, config) {
   employees.forEach((name) => {
     const stat = employeeStats[name];
     stat.ending_b_streak = streaks[name];
+    stat.ending_c_streak = cStreaks[name];
     stat.role_percentages = Object.fromEntries(
       ROLES.map((role) => [
         role,
@@ -326,7 +357,7 @@ export function generatePeriod(daysInfo, vacations, seed, config) {
     let unassigned;
 
     if (dayType === "OFF") {
-      requirements = { A: 0, B: 0, C: 0 };
+      requirements = Object.fromEntries(ROLES.map((role) => [role, 0]));
       assignment = {};
       vacationNames = [];
       available = [];
@@ -381,6 +412,7 @@ export function generatePeriod(daysInfo, vacations, seed, config) {
   });
 
   return {
+    rules_version: RULES_VERSION,
     seed: Number(seed),
     schedule,
     stats: calculateStats(schedule, vacationSets, config),
