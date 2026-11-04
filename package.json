@@ -1,0 +1,6 @@
+{
+  "name": "crematorium-scheduler",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test tests/five-roles.test.mjs" }
+}
