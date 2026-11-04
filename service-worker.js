@@ -1,4 +1,4 @@
-const CACHE_NAME = "scheduler-shell-v3";
+const CACHE_NAME = "scheduler-shell-v4-five-roles";
 const SCOPE_URL = self.registration.scope;
 const APP_SHELL = [
   "",
@@ -21,7 +21,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("scheduler-shell-") && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   );
 });
